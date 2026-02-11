@@ -1,0 +1,23 @@
+# MySQL binary / source (large, not part of project source)
+mysql960/
+mysql960.source/
+mysql-9.6.0-linux-glibc2.28-x86_64.tar.xz
+mysql-9.6.0.tar.gz
+
+# Claude local workspace (managed in separate local repo)
+claude/
+
+# Build artifacts
+*.so
+*.o
+
+# Claude Code config
+.claude/
+
+# Editor / IDE
+.vscode/
+*.swp
+*~
+
+# Gemini artifacts
+*.gemini
