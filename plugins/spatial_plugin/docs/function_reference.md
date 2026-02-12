@@ -46,7 +46,6 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [stx_project](#stx_project) | GEOMETRY | 点の投影 / Projects a point by distance and azimuth |
 | [stx_linelocatepoint](#stx_linelocatepoint) | DOUBLE | 線上の最近接位置 / Fraction of closest point on line |
 | [stx_linesubstring](#stx_linesubstring) | GEOMETRY | 線の部分抽出 / Extracts a portion of a line |
-| [stx_lineinterpolatepoint](#stx_lineinterpolatepoint) | GEOMETRY | 線上の指定比率の点 / Point at a given fraction along a line |
 | [stx_angle](#stx_angle) | DOUBLE | 3点がなす角度 / Angle formed by three points |
 | [stx_translate](#stx_translate) | GEOMETRY | 平行移動 / Translates a geometry by dx, dy |
 | [stx_scale](#stx_scale) | GEOMETRY | スケール変換 / Scales a geometry by sx, sy |
@@ -495,53 +494,6 @@ SELECT ST_AsText(stx_linesubstring(
 
 ---
 
-### stx_lineinterpolatepoint
-
-ライン上の指定した比率の位置にある点を返す。
-Returns the point at a given fraction along a linestring.
-
-```sql
-stx_lineinterpolatepoint(line, fraction) -> GEOMETRY (Point)
-```
-
-#### 引数 (Arguments)
-
-| 引数 (Arg) | 型 (Type) | 説明 (Description) |
-|---|---|---|
-| line | LINESTRING | 対象のライン / Target line |
-| fraction | DOUBLE | 比率 0.0~1.0 / Fraction (0.0 = start, 1.0 = end) |
-
-#### 戻り値 (Return Value)
-
-ライン上の指定比率の位置にある Point ジオメトリ（入力と同じ SRID）。
-A Point geometry at the specified fraction of the line's length (same SRID as input).
-
-#### 使用例 (Examples)
-
-```sql
--- ラインの中央の点 / Midpoint of line
-SELECT ST_AsText(stx_lineinterpolatepoint(
-  ST_GeomFromText('LINESTRING(0 0, 10 0)'), 0.5));
--- POINT(5 0)
-
--- 複数セグメントのラインの 25% の位置
--- 25% along a multi-segment line
-SELECT ST_AsText(stx_lineinterpolatepoint(
-  ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.25));
--- POINT(5 0)
-```
-
-#### 備考 (Notes)
-
-`stx_linelocatepoint` で求めた比率をこの関数に渡すことで、ライン上の最近接点を取得できる。
-Pass the fraction obtained from `stx_linelocatepoint` to this function to get the nearest point on the line.
-
-#### 対応する他の関数 (Equivalent in Other Systems)
-
-- PostGIS: `ST_LineInterpolatePoint()`
-
----
-
 ### stx_angle
 
 3つの点 P1, P2, P3 において、P2 を頂点とする角度をラジアンで返す。
@@ -736,8 +688,8 @@ Rotation center is the origin (0, 0). To rotate around a different center, use `
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全13関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 13 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全12関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 12 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -758,7 +710,6 @@ ORDER BY UDF_NAME;
 | stx_coveredby             | integer         |
 | stx_covers                | integer         |
 | stx_dwithin               | integer         |
-| stx_lineinterpolatepoint  | char            |
 | stx_linelocatepoint       | double          |
 | stx_linesubstring         | char            |
 | stx_perimeter             | double          |

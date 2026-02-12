@@ -270,40 +270,6 @@ static LinestringT line_substring_impl(const LinestringT &line, double start_fra
   return result;
 }
 
-// ===== LineInterpolatePoint ==================================================
-// Returns the point at a given fraction [0,1] along a linestring.
-
-template <typename PointT, typename LinestringT>
-static PointT line_interpolate_point_impl(const LinestringT &line,
-                                          double fraction) {
-  PointT result;
-  if (line.empty()) return result;
-  double total_len = bg::length(line);
-  if (total_len == 0.0 || line.size() < 2) return line[0];
-
-  fraction = std::max(0.0, std::min(1.0, fraction));
-  double target_dist = fraction * total_len;
-  double accumulated = 0.0;
-
-  for (size_t i = 0; i + 1 < line.size(); ++i) {
-    double seg_len = bg::distance(line[i], line[i + 1]);
-    double seg_end = accumulated + seg_len;
-    if (seg_end >= target_dist) {
-      double t = (seg_len > 0.0) ? (target_dist - accumulated) / seg_len : 0.0;
-      t = std::max(0.0, std::min(1.0, t));
-      bg::set<0>(result,
-                 bg::get<0>(line[i]) +
-                     t * (bg::get<0>(line[i + 1]) - bg::get<0>(line[i])));
-      bg::set<1>(result,
-                 bg::get<1>(line[i]) +
-                     t * (bg::get<1>(line[i + 1]) - bg::get<1>(line[i])));
-      return result;
-    }
-    accumulated = seg_end;
-  }
-  return line.back();
-}
-
 // ===== Coordinate transform helpers ==========================================
 // Apply a coordinate transformation function to all points in a geometry.
 
@@ -737,59 +703,6 @@ static void stx_linesubstring_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
-// ----- stx_lineinterpolatepoint ----------------------------------------------
-// Returns the point at a given fraction [0,1] along a linestring.
-
-static bool stx_lineinterpolatepoint_init(UDF_INIT *initid, UDF_ARGS *args,
-                                          char *msg) {
-  if (args->arg_count != 2) {
-    strcpy(msg,
-           "stx_lineinterpolatepoint() requires 2 arguments (line, fraction)");
-    return true;
-  }
-  args->arg_type[0] = STRING_RESULT;
-  args->arg_type[1] = REAL_RESULT;
-  initid->maybe_null = 1;
-  initid->max_length = 25;
-  return false;
-}
-
-static char *stx_lineinterpolatepoint(UDF_INIT *initid, UDF_ARGS *args,
-                                      char *result, unsigned long *length,
-                                      char *is_null, char *error) {
-  if (!args->args[0] || !args->args[1]) {
-    *is_null = 1;
-    return nullptr;
-  }
-  auto r = parse_geometry(args->args[0], args->lengths[0]);
-  if (!r) { *error = 1; return nullptr; }
-  double fraction = *reinterpret_cast<double *>(args->args[1]);
-
-  std::string wkb;
-
-  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
-    auto *ls = std::get_if<Linestring>(cv);
-    if (!ls) { *error = 1; return nullptr; }
-    auto pt = line_interpolate_point_impl<Point, Linestring>(*ls, fraction);
-    wkb = write_point(r->srid, pt);
-  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
-    auto *ls = std::get_if<GeoLinestring>(gv);
-    if (!ls) { *error = 1; return nullptr; }
-    auto pt =
-        line_interpolate_point_impl<GeoPoint, GeoLinestring>(*ls, fraction);
-    wkb = write_point(r->srid, pt);
-  } else {
-    *error = 1;
-    return nullptr;
-  }
-
-  *length = static_cast<unsigned long>(wkb.size());
-  std::memcpy(result, wkb.data(), wkb.size());
-  return result;
-}
-
-static void stx_lineinterpolatepoint_deinit(UDF_INIT *) {}
-
 // ----- stx_angle -------------------------------------------------------------
 // Returns the angle (radians) at P2 formed by rays P2->P1 and P2->P3.
 // Result is in [0, 2*pi), measured counterclockwise from P2->P1 to P2->P3.
@@ -1009,9 +922,6 @@ static const udf_entry udf_table[] = {
      stx_linelocatepoint_init, stx_linelocatepoint_deinit},
     {"stx_linesubstring", STRING_RESULT, (Udf_func_any)stx_linesubstring,
      stx_linesubstring_init, stx_linesubstring_deinit},
-    {"stx_lineinterpolatepoint", STRING_RESULT,
-     (Udf_func_any)stx_lineinterpolatepoint, stx_lineinterpolatepoint_init,
-     stx_lineinterpolatepoint_deinit},
     {"stx_angle", REAL_RESULT, (Udf_func_any)stx_angle, stx_angle_init,
      stx_angle_deinit},
     {"stx_translate", STRING_RESULT, (Udf_func_any)stx_translate,
