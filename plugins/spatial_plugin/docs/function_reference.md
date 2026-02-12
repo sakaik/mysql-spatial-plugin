@@ -499,6 +499,34 @@ INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 `INSTALL PLUGIN` を実行すると全8関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
 All 8 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
+### 登録済み関数の確認 (Verifying Registered Functions)
+
+`performance_schema.user_defined_functions` で現在登録されている関数を確認できる。
+You can verify the registered functions via `performance_schema.user_defined_functions`.
+
+```sql
+SELECT UDF_NAME, UDF_RETURN_TYPE
+FROM performance_schema.user_defined_functions
+WHERE UDF_NAME LIKE 'stx_%'
+ORDER BY UDF_NAME;
+
++---------------------+-----------------+
+| UDF_NAME            | UDF_RETURN_TYPE |
++---------------------+-----------------+
+| stx_azimuth         | double          |
+| stx_coveredby       | integer         |
+| stx_covers          | integer         |
+| stx_dwithin         | integer         |
+| stx_linelocatepoint | double          |
+| stx_linesubstring   | char            |
+| stx_perimeter       | double          |
+| stx_project         | char            |
++---------------------+-----------------+
+```
+
+`UDF_RETURN_TYPE` が `char` の関数（stx_project, stx_linesubstring）は、実際にはジオメトリのバイナリ（SRID + WKB）を返す。UDF の仕様上 GEOMETRY 型を直接返せないため `STRING_RESULT` で登録している。`ST_AsText()` 等に渡せばジオメトリとして正しく解釈される。
+Functions with `UDF_RETURN_TYPE = char` (stx_project, stx_linesubstring) actually return geometry binary data (SRID + WKB). Due to the UDF specification, GEOMETRY cannot be used as a return type directly, so they are registered as `STRING_RESULT`. The returned values can be passed to `ST_AsText()` or other spatial functions and will be interpreted correctly as geometries.
+
 ## アンインストール (Uninstallation)
 
 ```sql
