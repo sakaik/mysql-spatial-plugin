@@ -270,6 +270,119 @@ static LinestringT line_substring_impl(const LinestringT &line, double start_fra
   return result;
 }
 
+// ===== LineInterpolatePoint ==================================================
+// Returns the point at a given fraction [0,1] along a linestring.
+
+template <typename PointT, typename LinestringT>
+static PointT line_interpolate_point_impl(const LinestringT &line,
+                                          double fraction) {
+  PointT result;
+  if (line.empty()) return result;
+  double total_len = bg::length(line);
+  if (total_len == 0.0 || line.size() < 2) return line[0];
+
+  fraction = std::max(0.0, std::min(1.0, fraction));
+  double target_dist = fraction * total_len;
+  double accumulated = 0.0;
+
+  for (size_t i = 0; i + 1 < line.size(); ++i) {
+    double seg_len = bg::distance(line[i], line[i + 1]);
+    double seg_end = accumulated + seg_len;
+    if (seg_end >= target_dist) {
+      double t = (seg_len > 0.0) ? (target_dist - accumulated) / seg_len : 0.0;
+      t = std::max(0.0, std::min(1.0, t));
+      bg::set<0>(result,
+                 bg::get<0>(line[i]) +
+                     t * (bg::get<0>(line[i + 1]) - bg::get<0>(line[i])));
+      bg::set<1>(result,
+                 bg::get<1>(line[i]) +
+                     t * (bg::get<1>(line[i + 1]) - bg::get<1>(line[i])));
+      return result;
+    }
+    accumulated = seg_end;
+  }
+  return line.back();
+}
+
+// ===== Coordinate transform helpers ==========================================
+// Apply a coordinate transformation function to all points in a geometry.
+
+template <typename PointT, typename Fn>
+static void xform_point(PointT &pt, Fn &&fn) {
+  double x = bg::get<0>(pt);
+  double y = bg::get<1>(pt);
+  fn(x, y);
+  bg::set<0>(pt, x);
+  bg::set<1>(pt, y);
+}
+
+template <typename Geom, typename Fn>
+static void apply_transform(Geom &g, Fn &&fn) {
+  using T = std::decay_t<Geom>;
+  if constexpr (std::is_same_v<T, Point> || std::is_same_v<T, GeoPoint>) {
+    xform_point(g, fn);
+  } else if constexpr (std::is_same_v<T, Linestring> ||
+                        std::is_same_v<T, GeoLinestring>) {
+    for (auto &pt : g) xform_point(pt, fn);
+  } else if constexpr (std::is_same_v<T, Polygon> ||
+                        std::is_same_v<T, GeoPolygon>) {
+    for (auto &pt : g.outer()) xform_point(pt, fn);
+    for (auto &ring : g.inners())
+      for (auto &pt : ring) xform_point(pt, fn);
+  } else if constexpr (std::is_same_v<T, MultiPoint> ||
+                        std::is_same_v<T, GeoMultiPoint>) {
+    for (auto &pt : g) xform_point(pt, fn);
+  } else if constexpr (std::is_same_v<T, MultiLinestring> ||
+                        std::is_same_v<T, GeoMultiLinestring>) {
+    for (auto &ls : g)
+      for (auto &pt : ls) xform_point(pt, fn);
+  } else if constexpr (std::is_same_v<T, MultiPolygon> ||
+                        std::is_same_v<T, GeoMultiPolygon>) {
+    for (auto &poly : g) {
+      for (auto &pt : poly.outer()) xform_point(pt, fn);
+      for (auto &ring : poly.inners())
+        for (auto &pt : ring) xform_point(pt, fn);
+    }
+  }
+}
+
+template <typename Fn>
+static void apply_transform_variant(CartesianVariant &v, Fn &&fn) {
+  std::visit([&fn](auto &g) { apply_transform(g, fn); }, v);
+}
+
+template <typename Fn>
+static void apply_transform_variant(GeographicVariant &v, Fn &&fn) {
+  std::visit([&fn](auto &g) { apply_transform(g, fn); }, v);
+}
+
+// Apply a transform to parsed geometry and return WKB result.
+template <typename Fn>
+static std::string transform_and_write(ParseResult &r, Fn &&fn) {
+  if (auto *cv = std::get_if<CartesianVariant>(&r.geometry)) {
+    apply_transform_variant(*cv, fn);
+    return write_geometry(r.srid, *cv);
+  }
+  if (auto *gv = std::get_if<GeographicVariant>(&r.geometry)) {
+    apply_transform_variant(*gv, fn);
+    return write_geometry(r.srid, *gv);
+  }
+  return {};
+}
+
+// Helper: return geometry WKB from a UDF (handles buffer vs malloc).
+static char *return_wkb(UDF_INIT *initid, const std::string &wkb, char *result,
+                        unsigned long *length) {
+  *length = static_cast<unsigned long>(wkb.size());
+  if (wkb.size() <= 255) {
+    std::memcpy(result, wkb.data(), wkb.size());
+    return result;
+  }
+  initid->ptr = static_cast<char *>(malloc(wkb.size()));
+  std::memcpy(initid->ptr, wkb.data(), wkb.size());
+  return initid->ptr;
+}
+
 // =============================================================================
 // UDF implementations
 // =============================================================================
@@ -624,6 +737,247 @@ static void stx_linesubstring_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_lineinterpolatepoint ----------------------------------------------
+// Returns the point at a given fraction [0,1] along a linestring.
+
+static bool stx_lineinterpolatepoint_init(UDF_INIT *initid, UDF_ARGS *args,
+                                          char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg,
+           "stx_lineinterpolatepoint() requires 2 arguments (line, fraction)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->max_length = 25;
+  return false;
+}
+
+static char *stx_lineinterpolatepoint(UDF_INIT *initid, UDF_ARGS *args,
+                                      char *result, unsigned long *length,
+                                      char *is_null, char *error) {
+  if (!args->args[0] || !args->args[1]) {
+    *is_null = 1;
+    return nullptr;
+  }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double fraction = *reinterpret_cast<double *>(args->args[1]);
+
+  std::string wkb;
+
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    auto *ls = std::get_if<Linestring>(cv);
+    if (!ls) { *error = 1; return nullptr; }
+    auto pt = line_interpolate_point_impl<Point, Linestring>(*ls, fraction);
+    wkb = write_point(r->srid, pt);
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    auto *ls = std::get_if<GeoLinestring>(gv);
+    if (!ls) { *error = 1; return nullptr; }
+    auto pt =
+        line_interpolate_point_impl<GeoPoint, GeoLinestring>(*ls, fraction);
+    wkb = write_point(r->srid, pt);
+  } else {
+    *error = 1;
+    return nullptr;
+  }
+
+  *length = static_cast<unsigned long>(wkb.size());
+  std::memcpy(result, wkb.data(), wkb.size());
+  return result;
+}
+
+static void stx_lineinterpolatepoint_deinit(UDF_INIT *) {}
+
+// ----- stx_angle -------------------------------------------------------------
+// Returns the angle (radians) at P2 formed by rays P2->P1 and P2->P3.
+// Result is in [0, 2*pi), measured counterclockwise from P2->P1 to P2->P3.
+
+static bool stx_angle_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 3) {
+    strcpy(msg, "stx_angle() requires 3 point arguments");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  args->arg_type[2] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->decimals = 15;
+  return false;
+}
+
+static double stx_angle(UDF_INIT *, UDF_ARGS *args, char *is_null,
+                         char *error) {
+  if (!args->args[0] || !args->args[1] || !args->args[2]) {
+    *is_null = 1;
+    return 0.0;
+  }
+  auto r1 = parse_geometry(args->args[0], args->lengths[0]);
+  auto r2 = parse_geometry(args->args[1], args->lengths[1]);
+  auto r3 = parse_geometry(args->args[2], args->lengths[2]);
+  if (!r1 || !r2 || !r3) { *error = 1; return 0.0; }
+
+  double x1, y1, x2, y2, x3, y3;
+
+  // Extract coordinates from Cartesian points
+  if (auto *c1 = std::get_if<CartesianVariant>(&r1->geometry)) {
+    auto *p1 = std::get_if<Point>(c1);
+    auto *c2 = std::get_if<CartesianVariant>(&r2->geometry);
+    auto *p2 = c2 ? std::get_if<Point>(c2) : nullptr;
+    auto *c3 = std::get_if<CartesianVariant>(&r3->geometry);
+    auto *p3 = c3 ? std::get_if<Point>(c3) : nullptr;
+    if (!p1 || !p2 || !p3) { *error = 1; return 0.0; }
+    x1 = p1->x(); y1 = p1->y();
+    x2 = p2->x(); y2 = p2->y();
+    x3 = p3->x(); y3 = p3->y();
+  } else if (auto *g1 = std::get_if<GeographicVariant>(&r1->geometry)) {
+    auto *p1 = std::get_if<GeoPoint>(g1);
+    auto *g2 = std::get_if<GeographicVariant>(&r2->geometry);
+    auto *p2 = g2 ? std::get_if<GeoPoint>(g2) : nullptr;
+    auto *g3 = std::get_if<GeographicVariant>(&r3->geometry);
+    auto *p3 = g3 ? std::get_if<GeoPoint>(g3) : nullptr;
+    if (!p1 || !p2 || !p3) { *error = 1; return 0.0; }
+    x1 = bg::get<0>(*p1); y1 = bg::get<1>(*p1);
+    x2 = bg::get<0>(*p2); y2 = bg::get<1>(*p2);
+    x3 = bg::get<0>(*p3); y3 = bg::get<1>(*p3);
+  } else {
+    *error = 1;
+    return 0.0;
+  }
+
+  double dx1 = x1 - x2, dy1 = y1 - y2;
+  double dx2 = x3 - x2, dy2 = y3 - y2;
+  double angle = std::atan2(dy2, dx2) - std::atan2(dy1, dx1);
+  if (angle < 0.0) angle += 2.0 * M_PI;
+  return angle;
+}
+
+static void stx_angle_deinit(UDF_INIT *) {}
+
+// ----- stx_translate ---------------------------------------------------------
+// Translates a geometry by (dx, dy).
+
+static bool stx_translate_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 3) {
+    strcpy(msg, "stx_translate() requires 3 arguments (geometry, dx, dy)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  args->arg_type[2] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_translate(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                            unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1] || !args->args[2]) {
+    *is_null = 1;
+    return nullptr;
+  }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double dx = *reinterpret_cast<double *>(args->args[1]);
+  double dy = *reinterpret_cast<double *>(args->args[2]);
+
+  auto wkb = transform_and_write(*r, [dx, dy](double &x, double &y) {
+    x += dx;
+    y += dy;
+  });
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_translate_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_scale -------------------------------------------------------------
+// Scales a geometry by (sx, sy) relative to origin.
+
+static bool stx_scale_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 3) {
+    strcpy(msg, "stx_scale() requires 3 arguments (geometry, sx, sy)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  args->arg_type[2] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_scale(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                        unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1] || !args->args[2]) {
+    *is_null = 1;
+    return nullptr;
+  }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double sx = *reinterpret_cast<double *>(args->args[1]);
+  double sy = *reinterpret_cast<double *>(args->args[2]);
+
+  auto wkb = transform_and_write(*r, [sx, sy](double &x, double &y) {
+    x *= sx;
+    y *= sy;
+  });
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_scale_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_rotate ------------------------------------------------------------
+// Rotates a geometry by angle (radians) around the origin.
+
+static bool stx_rotate_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_rotate() requires 2 arguments (geometry, angle)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_rotate(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                         unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) {
+    *is_null = 1;
+    return nullptr;
+  }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double angle = *reinterpret_cast<double *>(args->args[1]);
+  double cos_a = std::cos(angle);
+  double sin_a = std::sin(angle);
+
+  auto wkb =
+      transform_and_write(*r, [cos_a, sin_a](double &x, double &y) {
+        double nx = x * cos_a - y * sin_a;
+        double ny = x * sin_a + y * cos_a;
+        x = nx;
+        y = ny;
+      });
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_rotate_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -655,6 +1009,17 @@ static const udf_entry udf_table[] = {
      stx_linelocatepoint_init, stx_linelocatepoint_deinit},
     {"stx_linesubstring", STRING_RESULT, (Udf_func_any)stx_linesubstring,
      stx_linesubstring_init, stx_linesubstring_deinit},
+    {"stx_lineinterpolatepoint", STRING_RESULT,
+     (Udf_func_any)stx_lineinterpolatepoint, stx_lineinterpolatepoint_init,
+     stx_lineinterpolatepoint_deinit},
+    {"stx_angle", REAL_RESULT, (Udf_func_any)stx_angle, stx_angle_init,
+     stx_angle_deinit},
+    {"stx_translate", STRING_RESULT, (Udf_func_any)stx_translate,
+     stx_translate_init, stx_translate_deinit},
+    {"stx_scale", STRING_RESULT, (Udf_func_any)stx_scale, stx_scale_init,
+     stx_scale_deinit},
+    {"stx_rotate", STRING_RESULT, (Udf_func_any)stx_rotate, stx_rotate_init,
+     stx_rotate_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

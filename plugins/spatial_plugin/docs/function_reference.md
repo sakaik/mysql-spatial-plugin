@@ -46,6 +46,11 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [stx_project](#stx_project) | GEOMETRY | 点の投影 / Projects a point by distance and azimuth |
 | [stx_linelocatepoint](#stx_linelocatepoint) | DOUBLE | 線上の最近接位置 / Fraction of closest point on line |
 | [stx_linesubstring](#stx_linesubstring) | GEOMETRY | 線の部分抽出 / Extracts a portion of a line |
+| [stx_lineinterpolatepoint](#stx_lineinterpolatepoint) | GEOMETRY | 線上の指定比率の点 / Point at a given fraction along a line |
+| [stx_angle](#stx_angle) | DOUBLE | 3点がなす角度 / Angle formed by three points |
+| [stx_translate](#stx_translate) | GEOMETRY | 平行移動 / Translates a geometry by dx, dy |
+| [stx_scale](#stx_scale) | GEOMETRY | スケール変換 / Scales a geometry by sx, sy |
+| [stx_rotate](#stx_rotate) | GEOMETRY | 回転 / Rotates a geometry by angle |
 
 ---
 
@@ -490,14 +495,249 @@ SELECT ST_AsText(stx_linesubstring(
 
 ---
 
+### stx_lineinterpolatepoint
+
+ライン上の指定した比率の位置にある点を返す。
+Returns the point at a given fraction along a linestring.
+
+```sql
+stx_lineinterpolatepoint(line, fraction) -> GEOMETRY (Point)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| line | LINESTRING | 対象のライン / Target line |
+| fraction | DOUBLE | 比率 0.0~1.0 / Fraction (0.0 = start, 1.0 = end) |
+
+#### 戻り値 (Return Value)
+
+ライン上の指定比率の位置にある Point ジオメトリ（入力と同じ SRID）。
+A Point geometry at the specified fraction of the line's length (same SRID as input).
+
+#### 使用例 (Examples)
+
+```sql
+-- ラインの中央の点 / Midpoint of line
+SELECT ST_AsText(stx_lineinterpolatepoint(
+  ST_GeomFromText('LINESTRING(0 0, 10 0)'), 0.5));
+-- POINT(5 0)
+
+-- 複数セグメントのラインの 25% の位置
+-- 25% along a multi-segment line
+SELECT ST_AsText(stx_lineinterpolatepoint(
+  ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.25));
+-- POINT(5 0)
+```
+
+#### 備考 (Notes)
+
+`stx_linelocatepoint` で求めた比率をこの関数に渡すことで、ライン上の最近接点を取得できる。
+Pass the fraction obtained from `stx_linelocatepoint` to this function to get the nearest point on the line.
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_LineInterpolatePoint()`
+
+---
+
+### stx_angle
+
+3つの点 P1, P2, P3 において、P2 を頂点とする角度をラジアンで返す。
+Returns the angle at P2 formed by the rays P2→P1 and P2→P3, in radians.
+
+```sql
+stx_angle(point1, point2, point3) -> DOUBLE
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| point1 | POINT | 1つ目の点 / First point (P1) |
+| point2 | POINT | 頂点 / Vertex point (P2) |
+| point3 | POINT | 3つ目の点 / Third point (P3) |
+
+#### 戻り値 (Return Value)
+
+ベクトル P2→P1 から P2→P3 への反時計回りの角度をラジアンで返す（0 ~ 2&pi;）。
+Returns the counterclockwise angle from vector P2→P1 to P2→P3 in radians (range: 0 to 2&pi;).
+
+#### 使用例 (Examples)
+
+```sql
+-- 直角（π/2 = 90°） / Right angle (pi/2 = 90 degrees)
+SELECT stx_angle(
+  ST_GeomFromText('POINT(1 0)'),
+  ST_GeomFromText('POINT(0 0)'),
+  ST_GeomFromText('POINT(0 1)'));
+-- 1.5707963267948966
+
+-- 直線（π = 180°） / Straight line (pi = 180 degrees)
+SELECT stx_angle(
+  ST_GeomFromText('POINT(1 0)'),
+  ST_GeomFromText('POINT(0 0)'),
+  ST_GeomFromText('POINT(-1 0)'));
+-- 3.141592653589793
+
+-- 度に変換 / Convert to degrees
+SELECT DEGREES(stx_angle(
+  ST_GeomFromText('POINT(1 0)'),
+  ST_GeomFromText('POINT(0 0)'),
+  ST_GeomFromText('POINT(0 1)')));
+-- 90.0
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Angle()`
+
+---
+
+### stx_translate
+
+ジオメトリを指定した (dx, dy) だけ平行移動する。
+Translates (shifts) a geometry by the given dx, dy offsets.
+
+```sql
+stx_translate(geometry, dx, dy) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| dx | DOUBLE | X 方向の移動量 / X offset |
+| dy | DOUBLE | Y 方向の移動量 / Y offset |
+
+#### 戻り値 (Return Value)
+
+平行移動後のジオメトリ（入力と同じ型・SRID）。全ジオメトリ型に対応。
+The translated geometry (same type and SRID as input). All geometry types are supported.
+
+#### 使用例 (Examples)
+
+```sql
+-- 点の移動 / Translate a point
+SELECT ST_AsText(stx_translate(
+  ST_GeomFromText('POINT(1 2)'), 10, 20));
+-- POINT(11 22)
+
+-- ポリゴンの移動 / Translate a polygon
+SELECT ST_AsText(stx_translate(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 5, 5));
+-- POLYGON((5 5,5 15,15 15,15 5,5 5))
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Translate()`
+
+---
+
+### stx_scale
+
+ジオメトリを原点を基準に (sx, sy) でスケール変換する。
+Scales a geometry by sx, sy factors relative to the origin.
+
+```sql
+stx_scale(geometry, sx, sy) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| sx | DOUBLE | X 方向のスケール係数 / X scale factor |
+| sy | DOUBLE | Y 方向のスケール係数 / Y scale factor |
+
+#### 戻り値 (Return Value)
+
+スケール変換後のジオメトリ（入力と同じ型・SRID）。全ジオメトリ型に対応。
+The scaled geometry (same type and SRID as input). All geometry types are supported.
+
+#### 使用例 (Examples)
+
+```sql
+-- 点の拡大 / Scale a point
+SELECT ST_AsText(stx_scale(
+  ST_GeomFromText('POINT(3 4)'), 2, 3));
+-- POINT(6 12)
+
+-- ラインの縮小 / Shrink a linestring
+SELECT ST_AsText(stx_scale(
+  ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.5, 0.5));
+-- LINESTRING(0 0,5 0,5 5)
+```
+
+#### 備考 (Notes)
+
+スケールの基準は原点 (0, 0)。別の点を基準にしたい場合は `stx_translate` で原点に移動し、スケール後に戻す。
+Scaling is relative to the origin (0, 0). To scale around a different center, use `stx_translate` to shift to origin, scale, then shift back.
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Scale()`
+
+---
+
+### stx_rotate
+
+ジオメトリを原点を中心に指定した角度（ラジアン）だけ回転する。
+Rotates a geometry by the given angle (radians) around the origin.
+
+```sql
+stx_rotate(geometry, angle) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| angle | DOUBLE | 回転角度（ラジアン、反時計回りが正） / Rotation angle in radians (positive = counterclockwise) |
+
+#### 戻り値 (Return Value)
+
+回転後のジオメトリ（入力と同じ型・SRID）。全ジオメトリ型に対応。
+The rotated geometry (same type and SRID as input). All geometry types are supported.
+
+#### 使用例 (Examples)
+
+```sql
+-- 点 (1,0) を 90° 回転 → (0,1) / Rotate (1,0) by 90 degrees -> (0,1)
+SELECT ST_AsText(stx_rotate(
+  ST_GeomFromText('POINT(1 0)'), PI() / 2));
+-- POINT(0 1)  (浮動小数点精度による近似 / approximate due to floating point)
+
+-- 点 (1,0) を 180° 回転 → (-1,0) / Rotate 180 degrees -> (-1,0)
+SELECT ST_AsText(stx_rotate(
+  ST_GeomFromText('POINT(1 0)'), PI()));
+-- POINT(-1 0)
+```
+
+#### 備考 (Notes)
+
+回転の中心は原点 (0, 0)。別の点を中心に回転したい場合は `stx_translate` で原点に移動し、回転後に戻す。
+Rotation center is the origin (0, 0). To rotate around a different center, use `stx_translate` to shift to origin, rotate, then shift back.
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Rotate()`
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全8関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 8 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全13関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 13 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -510,22 +750,27 @@ FROM performance_schema.user_defined_functions
 WHERE UDF_NAME LIKE 'stx_%'
 ORDER BY UDF_NAME;
 
-+---------------------+-----------------+
-| UDF_NAME            | UDF_RETURN_TYPE |
-+---------------------+-----------------+
-| stx_azimuth         | double          |
-| stx_coveredby       | integer         |
-| stx_covers          | integer         |
-| stx_dwithin         | integer         |
-| stx_linelocatepoint | double          |
-| stx_linesubstring   | char            |
-| stx_perimeter       | double          |
-| stx_project         | char            |
-+---------------------+-----------------+
++---------------------------+-----------------+
+| UDF_NAME                  | UDF_RETURN_TYPE |
++---------------------------+-----------------+
+| stx_angle                 | double          |
+| stx_azimuth               | double          |
+| stx_coveredby             | integer         |
+| stx_covers                | integer         |
+| stx_dwithin               | integer         |
+| stx_lineinterpolatepoint  | char            |
+| stx_linelocatepoint       | double          |
+| stx_linesubstring         | char            |
+| stx_perimeter             | double          |
+| stx_project               | char            |
+| stx_rotate                | char            |
+| stx_scale                 | char            |
+| stx_translate             | char            |
++---------------------------+-----------------+
 ```
 
-`UDF_RETURN_TYPE` が `char` の関数（stx_project, stx_linesubstring）は、実際にはジオメトリのバイナリ（SRID + WKB）を返す。UDF の仕様上 GEOMETRY 型を直接返せないため `STRING_RESULT` で登録している。`ST_AsText()` 等に渡せばジオメトリとして正しく解釈される。
-Functions with `UDF_RETURN_TYPE = char` (stx_project, stx_linesubstring) actually return geometry binary data (SRID + WKB). Due to the UDF specification, GEOMETRY cannot be used as a return type directly, so they are registered as `STRING_RESULT`. The returned values can be passed to `ST_AsText()` or other spatial functions and will be interpreted correctly as geometries.
+`UDF_RETURN_TYPE` が `char` の関数は、実際にはジオメトリのバイナリ（SRID + WKB）を返す。UDF の仕様上 GEOMETRY 型を直接返せないため `STRING_RESULT` で登録している。`ST_AsText()` 等に渡せばジオメトリとして正しく解釈される。
+Functions with `UDF_RETURN_TYPE = char` actually return geometry binary data (SRID + WKB). Due to the UDF specification, GEOMETRY cannot be used as a return type directly, so they are registered as `STRING_RESULT`. The returned values can be passed to `ST_AsText()` or other spatial functions and will be interpreted correctly as geometries.
 
 ## アンインストール (Uninstallation)
 

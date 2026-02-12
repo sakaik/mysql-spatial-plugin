@@ -404,6 +404,165 @@ CALL assert_eq_text(
   'LINESTRING(5 0,10 0,10 5)');
 
 -- =============================================================================
+-- stx_lineinterpolatepoint
+-- =============================================================================
+
+CALL assert_eq_text(
+  'lineinterpolatepoint: midpoint',
+  ST_AsText(stx_lineinterpolatepoint(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'), 0.5)),
+  'POINT(5 0)');
+
+CALL assert_eq_text(
+  'lineinterpolatepoint: start',
+  ST_AsText(stx_lineinterpolatepoint(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'), 0.0)),
+  'POINT(0 0)');
+
+CALL assert_eq_text(
+  'lineinterpolatepoint: end',
+  ST_AsText(stx_lineinterpolatepoint(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'), 1.0)),
+  'POINT(10 0)');
+
+CALL assert_eq_text(
+  'lineinterpolatepoint: quarter on multi-segment',
+  ST_AsText(stx_lineinterpolatepoint(
+    ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.25)),
+  'POINT(5 0)');
+
+CALL assert_eq_text(
+  'lineinterpolatepoint: three-quarter on multi-segment',
+  ST_AsText(stx_lineinterpolatepoint(
+    ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.75)),
+  'POINT(10 5)');
+
+-- =============================================================================
+-- stx_angle
+-- =============================================================================
+
+CALL assert_eq_double(
+  'angle: right angle (pi/2)',
+  stx_angle(
+    ST_GeomFromText('POINT(1 0)'),
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(0 1)')),
+  PI() / 2, 0.0001);
+
+CALL assert_eq_double(
+  'angle: straight line (pi)',
+  stx_angle(
+    ST_GeomFromText('POINT(1 0)'),
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(-1 0)')),
+  PI(), 0.0001);
+
+CALL assert_eq_double(
+  'angle: full turn minus small = 3*pi/2',
+  stx_angle(
+    ST_GeomFromText('POINT(0 1)'),
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(1 0)')),
+  3 * PI() / 2, 0.0001);
+
+CALL assert_eq_double(
+  'angle: 45 degrees',
+  stx_angle(
+    ST_GeomFromText('POINT(1 0)'),
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(1 1)')),
+  PI() / 4, 0.0001);
+
+CALL assert_eq_double(
+  'angle: NULL input returns NULL',
+  stx_angle(NULL, ST_GeomFromText('POINT(0 0)'), ST_GeomFromText('POINT(1 0)')),
+  NULL, 0);
+
+-- =============================================================================
+-- stx_translate
+-- =============================================================================
+
+CALL assert_eq_text(
+  'translate: point by (10, 20)',
+  ST_AsText(stx_translate(ST_GeomFromText('POINT(1 2)'), 10, 20)),
+  'POINT(11 22)');
+
+CALL assert_eq_text(
+  'translate: linestring by (5, -5)',
+  ST_AsText(stx_translate(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 5, -5)),
+  'LINESTRING(5 -5,15 -5)');
+
+CALL assert_eq_text(
+  'translate: polygon by (1, 1)',
+  ST_AsText(stx_translate(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 1, 1)),
+  'POLYGON((1 1,1 11,11 11,11 1,1 1))');
+
+CALL assert_eq_text(
+  'translate: NULL input returns NULL',
+  ST_AsText(stx_translate(NULL, 1, 1)),
+  NULL);
+
+-- =============================================================================
+-- stx_scale
+-- =============================================================================
+
+CALL assert_eq_text(
+  'scale: point by (2, 3)',
+  ST_AsText(stx_scale(ST_GeomFromText('POINT(3 4)'), 2, 3)),
+  'POINT(6 12)');
+
+CALL assert_eq_text(
+  'scale: linestring by (0.5, 0.5)',
+  ST_AsText(stx_scale(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.5, 0.5)),
+  'LINESTRING(0 0,5 0,5 5)');
+
+CALL assert_eq_text(
+  'scale: polygon by (2, 2)',
+  ST_AsText(stx_scale(
+    ST_GeomFromText('POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))'), 2, 2)),
+  'POLYGON((0 0,0 10,10 10,10 0,0 0))');
+
+CALL assert_eq_text(
+  'scale: NULL input returns NULL',
+  ST_AsText(stx_scale(NULL, 2, 2)),
+  NULL);
+
+-- =============================================================================
+-- stx_rotate
+-- =============================================================================
+
+CALL assert_eq_double(
+  'rotate: point (1,0) by pi/2, x component',
+  ST_X(stx_rotate(ST_GeomFromText('POINT(1 0)'), PI() / 2)),
+  0.0, 0.0001);
+
+CALL assert_eq_double(
+  'rotate: point (1,0) by pi/2, y component',
+  ST_Y(stx_rotate(ST_GeomFromText('POINT(1 0)'), PI() / 2)),
+  1.0, 0.0001);
+
+CALL assert_eq_double(
+  'rotate: point (1,0) by pi, x component',
+  ST_X(stx_rotate(ST_GeomFromText('POINT(1 0)'), PI())),
+  -1.0, 0.0001);
+
+CALL assert_eq_double(
+  'rotate: point (1,0) by pi, y component',
+  ST_Y(stx_rotate(ST_GeomFromText('POINT(1 0)'), PI())),
+  0.0, 0.0001);
+
+CALL assert_eq_double(
+  'rotate: point (0,1) by -pi/2, x component',
+  ST_X(stx_rotate(ST_GeomFromText('POINT(0 1)'), -PI() / 2)),
+  1.0, 0.0001);
+
+CALL assert_eq_text(
+  'rotate: NULL input returns NULL',
+  ST_AsText(stx_rotate(NULL, PI())),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 
