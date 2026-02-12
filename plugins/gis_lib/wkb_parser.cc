@@ -96,7 +96,6 @@ struct Parser {
     double v1, v2;
     if (!r.read_double(&v1) || !r.read_double(&v2)) return false;
     if constexpr (Traits::swap_xy) {
-      // SRID 4326: WKB has (lat, lon), boost geographic wants (lon, lat)
       bg::set<0>(pt, v2);
       bg::set<1>(pt, v1);
     } else {

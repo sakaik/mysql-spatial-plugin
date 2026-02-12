@@ -79,8 +79,8 @@ struct GeographicTraits {
   using multi_linestring = GeoMultiLinestring;
   using multi_polygon = GeoMultiPolygon;
   using variant = GeographicVariant;
-  // SRID 4326: WKB stores (lat, lon), boost expects (lon, lat)
-  static constexpr bool swap_xy = true;
+  // MySQL WKB stores (lon, lat), same as boost geographic convention.
+  static constexpr bool swap_xy = false;
 };
 
 // Returns true if the SRID represents a geographic coordinate system.

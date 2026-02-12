@@ -43,9 +43,9 @@ inline std::string write_point(uint32_t srid, const Point &pt) {
   return write_point_wkb(srid, pt.x(), pt.y());
 }
 
-// Write a Geographic Point (swaps boost lon,lat back to MySQL lat,lon).
+// Write a Geographic Point (boost and MySQL WKB both use lon,lat order).
 inline std::string write_point(uint32_t srid, const GeoPoint &pt) {
-  return write_point_wkb(srid, bg::get<1>(pt), bg::get<0>(pt));
+  return write_point_wkb(srid, bg::get<0>(pt), bg::get<1>(pt));
 }
 
 // Write a Cartesian LineString.
@@ -62,7 +62,7 @@ inline std::string write_linestring(uint32_t srid, const Linestring &ls) {
   return buf;
 }
 
-// Write a Geographic LineString (swap back).
+// Write a Geographic LineString (boost and MySQL WKB both use lon,lat order).
 inline std::string write_linestring(uint32_t srid, const GeoLinestring &ls) {
   std::string buf;
   buf.reserve(4 + 5 + 4 + 16 * ls.size());
@@ -70,8 +70,8 @@ inline std::string write_linestring(uint32_t srid, const GeoLinestring &ls) {
   detail::append_wkb_header(buf, GeometryType::LineString);
   detail::append_uint32(buf, static_cast<uint32_t>(ls.size()));
   for (const auto &pt : ls) {
-    detail::append_double(buf, bg::get<1>(pt));  // lat
     detail::append_double(buf, bg::get<0>(pt));  // lon
+    detail::append_double(buf, bg::get<1>(pt));  // lat
   }
   return buf;
 }

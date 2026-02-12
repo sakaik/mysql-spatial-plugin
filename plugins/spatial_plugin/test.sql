@@ -3,6 +3,9 @@
 -- Usage: make test
 -- =============================================================================
 
+CREATE DATABASE IF NOT EXISTS stx_test;
+USE stx_test;
+
 -- Ensure plugin is loaded
 SELECT 'SETUP: plugin check' AS info;
 SELECT IF(COUNT(*) > 0, 'OK', 'FAIL: plugin not installed')
@@ -303,22 +306,26 @@ CALL assert_eq_text(
   ST_AsText(stx_project(ST_GeomFromText('POINT(0 0)'), 10.0, 0.0)),
   'POINT(0 10)');
 
-CALL assert_eq_text(
-  'project: east by 10 cartesian',
-  ST_AsText(stx_project(ST_GeomFromText('POINT(0 0)'), 10.0, PI() / 2)),
-  'POINT(10 0)');
+CALL assert_eq_double(
+  'project: east by 10 cartesian, x',
+  ST_X(stx_project(ST_GeomFromText('POINT(0 0)'), 10.0, PI() / 2)),
+  10.0, 0.0001);
+CALL assert_eq_double(
+  'project: east by 10 cartesian, y',
+  ST_Y(stx_project(ST_GeomFromText('POINT(0 0)'), 10.0, PI() / 2)),
+  0.0, 0.0001);
 
 -- Geographic: project from Tokyo north by 1000m
--- Lat should increase, lon should stay ~same
+-- ST_X = latitude (should increase), ST_Y = longitude (should stay ~same)
 SET @proj_tokyo = stx_project(ST_GeomFromText('POINT(35.6762 139.6503)', 4326), 1000.0, 0.0);
 CALL assert_eq_double(
   'project: Tokyo north 1km, lat increases',
-  ST_Y(@proj_tokyo),
-  139.6503, 0.01);
-CALL assert_eq_double(
-  'project: Tokyo north 1km, lon ~same',
   ST_X(@proj_tokyo),
   35.6852, 0.002);
+CALL assert_eq_double(
+  'project: Tokyo north 1km, lon ~same',
+  ST_Y(@proj_tokyo),
+  139.6503, 0.01);
 
 CALL assert_eq_text(
   'project: NULL input returns NULL',
@@ -411,3 +418,4 @@ SELECT CONCAT(
 DROP PROCEDURE IF EXISTS assert_eq_double;
 DROP PROCEDURE IF EXISTS assert_eq_int;
 DROP PROCEDURE IF EXISTS assert_eq_text;
+DROP DATABASE IF EXISTS stx_test;
