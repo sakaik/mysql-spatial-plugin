@@ -59,6 +59,12 @@ Download and extract them from [MySQL Downloads](https://dev.mysql.com/downloads
 
 Both directories should be placed at the repository root (siblings of `plugins/`).
 
+## Pre-built Binary
+
+A pre-built `spatial_plugin.so` is included for **MySQL 9.6.x on Linux (x86_64)**.
+The binary is tied to the MySQL version it was compiled against and cannot be used with other versions.
+To use a different MySQL version, rebuild from source (see below).
+
 ## Build
 
 ```bash
