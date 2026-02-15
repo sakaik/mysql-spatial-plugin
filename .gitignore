@@ -1,6 +1,8 @@
-# MySQL binary / source (large, not part of project source)
-mysql960/
-mysql960.source/
+# MySQL binary / source (placeholder dirs kept via .gitkeep)
+mysql960/*
+!mysql960/.gitkeep
+mysql960.source/*
+!mysql960.source/.gitkeep
 mysql-9.6.0-linux-glibc2.28-x86_64.tar.xz
 mysql-9.6.0.tar.gz
 
@@ -8,7 +10,6 @@ mysql-9.6.0.tar.gz
 claude/
 
 # Build artifacts
-*.so
 *.o
 
 # Claude Code config
