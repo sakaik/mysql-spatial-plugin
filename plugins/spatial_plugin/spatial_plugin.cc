@@ -13,10 +13,16 @@
 #include <cmath>
 #include <string>
 
+#include <boost/geometry/algorithms/area.hpp>
 #include <boost/geometry/algorithms/covered_by.hpp>
 #include <boost/geometry/algorithms/distance.hpp>
+#include <boost/geometry/algorithms/equals.hpp>
+#include <boost/geometry/algorithms/intersects.hpp>
 #include <boost/geometry/algorithms/length.hpp>
 #include <boost/geometry/algorithms/perimeter.hpp>
+#include <boost/geometry/algorithms/reverse.hpp>
+#include <boost/geometry/algorithms/touches.hpp>
+#include <boost/geometry/algorithms/within.hpp>
 #include <boost/geometry/formulas/vincenty_direct.hpp>
 #include <boost/geometry/formulas/vincenty_inverse.hpp>
 #include <boost/geometry/srs/spheroid.hpp>
@@ -891,6 +897,559 @@ static void stx_rotate_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_reverse -----------------------------------------------------------
+// Reverses vertex order of a geometry.
+
+static bool stx_reverse_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_reverse() requires 1 argument");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_reverse(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                          unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  // Apply bg::reverse to the geometry
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    std::visit([](auto &g) { bg::reverse(g); }, *cv);
+    auto wkb = write_geometry(r->srid, *cv);
+    if (wkb.empty()) { *error = 1; return nullptr; }
+    return return_wkb(initid, wkb, result, length);
+  }
+  if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    std::visit([](auto &g) { bg::reverse(g); }, *gv);
+    auto wkb = write_geometry(r->srid, *gv);
+    if (wkb.empty()) { *error = 1; return nullptr; }
+    return return_wkb(initid, wkb, result, length);
+  }
+
+  *error = 1;
+  return nullptr;
+}
+
+static void stx_reverse_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+}  // extern "C" (pause for template helpers)
+
+// ----- stx_pointonsurface helpers (outside extern "C" for templates) ---------
+
+// Compute coordinate-average centroid (works for both Cartesian and Geographic).
+template <typename PointT, typename PolygonT>
+static PointT coord_avg_centroid(const PolygonT &poly) {
+  const auto &outer = poly.outer();
+  double sx = 0, sy = 0;
+  // Exclude last point if it duplicates the first (closed ring).
+  size_t n = outer.size();
+  if (n > 1 && bg::get<0>(outer[0]) == bg::get<0>(outer[n - 1]) &&
+      bg::get<1>(outer[0]) == bg::get<1>(outer[n - 1]))
+    --n;
+  if (n == 0) { PointT p; bg::set<0>(p, 0); bg::set<1>(p, 0); return p; }
+  for (size_t i = 0; i < n; ++i) {
+    sx += bg::get<0>(outer[i]);
+    sy += bg::get<1>(outer[i]);
+  }
+  PointT c;
+  bg::set<0>(c, sx / n);
+  bg::set<1>(c, sy / n);
+  return c;
+}
+
+// Helper: find a point guaranteed to be inside the polygon.
+template <typename PointT, typename PolygonT>
+static PointT point_on_surface_impl(const PolygonT &poly) {
+  PointT centroid = coord_avg_centroid<PointT, PolygonT>(poly);
+  if (bg::within(centroid, poly)) return centroid;
+
+  // Fallback: scan along y = centroid.y across polygon exterior ring
+  double cy = bg::get<1>(centroid);
+  const auto &outer = poly.outer();
+  std::vector<double> xs;
+  for (size_t i = 0; i + 1 < outer.size(); ++i) {
+    double y0 = bg::get<1>(outer[i]);
+    double y1 = bg::get<1>(outer[i + 1]);
+    if ((y0 <= cy && cy < y1) || (y1 <= cy && cy < y0)) {
+      double x0 = bg::get<0>(outer[i]);
+      double x1 = bg::get<0>(outer[i + 1]);
+      double t = (cy - y0) / (y1 - y0);
+      xs.push_back(x0 + t * (x1 - x0));
+    }
+  }
+  std::sort(xs.begin(), xs.end());
+  if (xs.size() >= 2) {
+    PointT p;
+    bg::set<0>(p, (xs[0] + xs[1]) / 2.0);
+    bg::set<1>(p, cy);
+    return p;
+  }
+  return centroid;
+}
+
+// DE-9IM pattern matching helper (outside extern "C" since it's C++ only).
+static bool de9im_match(const std::string &matrix, const char *pattern,
+                         size_t pat_len) {
+  if (matrix.size() != 9 || pat_len != 9) return false;
+  for (int i = 0; i < 9; ++i) {
+    char m = matrix[i];
+    char p = pattern[i];
+    if (p == '*') continue;
+    if (p == 'T' || p == 't') {
+      if (m == 'F' || m == '-' || m == 'f') return false;
+    } else if (p == 'F' || p == 'f') {
+      if (m != 'F' && m != 'f') return false;
+    } else {
+      if (m != p) return false;
+    }
+  }
+  return true;
+}
+
+extern "C" {  // resume extern "C" for UDF functions
+
+// ----- stx_pointonsurface ----------------------------------------------------
+
+static bool stx_pointonsurface_init(UDF_INIT *initid, UDF_ARGS *args,
+                                     char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_pointonsurface() requires 1 argument (polygon)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->max_length = 25;
+  return false;
+}
+
+static char *stx_pointonsurface(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                                 unsigned long *length, char *is_null,
+                                 char *error) {
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  std::string wkb;
+
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    if (auto *poly = std::get_if<Polygon>(cv)) {
+      auto pt = point_on_surface_impl<Point, Polygon>(*poly);
+      wkb = write_point(r->srid, pt);
+    } else if (auto *mpoly = std::get_if<MultiPolygon>(cv)) {
+      if (mpoly->empty()) { *error = 1; return nullptr; }
+      const Polygon *largest = &(*mpoly)[0];
+      double max_area = std::abs(bg::area(*largest));
+      for (size_t i = 1; i < mpoly->size(); ++i) {
+        double a = std::abs(bg::area((*mpoly)[i]));
+        if (a > max_area) { max_area = a; largest = &(*mpoly)[i]; }
+      }
+      auto pt = point_on_surface_impl<Point, Polygon>(*largest);
+      wkb = write_point(r->srid, pt);
+    } else {
+      *error = 1;
+      return nullptr;
+    }
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    if (auto *poly = std::get_if<GeoPolygon>(gv)) {
+      auto pt = point_on_surface_impl<GeoPoint, GeoPolygon>(*poly);
+      wkb = write_point(r->srid, pt);
+    } else if (auto *mpoly = std::get_if<GeoMultiPolygon>(gv)) {
+      if (mpoly->empty()) { *error = 1; return nullptr; }
+      const GeoPolygon *largest = &(*mpoly)[0];
+      double max_area = std::abs(bg::area(*largest));
+      for (size_t i = 1; i < mpoly->size(); ++i) {
+        double a = std::abs(bg::area((*mpoly)[i]));
+        if (a > max_area) { max_area = a; largest = &(*mpoly)[i]; }
+      }
+      auto pt = point_on_surface_impl<GeoPoint, GeoPolygon>(*largest);
+      wkb = write_point(r->srid, pt);
+    } else {
+      *error = 1;
+      return nullptr;
+    }
+  } else {
+    *error = 1;
+    return nullptr;
+  }
+
+  *length = static_cast<unsigned long>(wkb.size());
+  std::memcpy(result, wkb.data(), wkb.size());
+  return result;
+}
+
+static void stx_pointonsurface_deinit(UDF_INIT *) {}
+
+}  // extern "C" (pause for closestpoint/relate templates)
+
+// ----- stx_closestpoint helpers (outside extern "C") -------------------------
+// Finds closest point on geometry2 to a reference point using segment projection.
+
+template <typename PointT>
+static PointT closest_point_on_segment(const PointT &p, const PointT &a,
+                                        const PointT &b) {
+  double ax = bg::get<0>(a), ay = bg::get<1>(a);
+  double bx = bg::get<0>(b), by = bg::get<1>(b);
+  double px = bg::get<0>(p), py = bg::get<1>(p);
+  double dx = bx - ax, dy = by - ay;
+  double len_sq = dx * dx + dy * dy;
+  double t = (len_sq > 0.0) ? ((px - ax) * dx + (py - ay) * dy) / len_sq : 0.0;
+  t = std::max(0.0, std::min(1.0, t));
+  PointT result;
+  bg::set<0>(result, ax + t * dx);
+  bg::set<1>(result, ay + t * dy);
+  return result;
+}
+
+template <typename PointT, typename LinestringT>
+static PointT closest_point_on_linestring(const PointT &p,
+                                           const LinestringT &ls) {
+  PointT best;
+  double best_dist_sq = std::numeric_limits<double>::max();
+  for (size_t i = 0; i + 1 < ls.size(); ++i) {
+    PointT cp = closest_point_on_segment(p, ls[i], ls[i + 1]);
+    double dx = bg::get<0>(cp) - bg::get<0>(p);
+    double dy = bg::get<1>(cp) - bg::get<1>(p);
+    double d2 = dx * dx + dy * dy;
+    if (d2 < best_dist_sq) { best_dist_sq = d2; best = cp; }
+  }
+  return best;
+}
+
+template <typename PointT, typename RingT>
+static PointT closest_point_on_ring(const PointT &p, const RingT &ring) {
+  PointT best;
+  double best_dist_sq = std::numeric_limits<double>::max();
+  for (size_t i = 0; i + 1 < ring.size(); ++i) {
+    PointT cp = closest_point_on_segment(p, ring[i], ring[i + 1]);
+    double dx = bg::get<0>(cp) - bg::get<0>(p);
+    double dy = bg::get<1>(cp) - bg::get<1>(p);
+    double d2 = dx * dx + dy * dy;
+    if (d2 < best_dist_sq) { best_dist_sq = d2; best = cp; }
+  }
+  return best;
+}
+
+template <typename PointT, typename PolygonT>
+static PointT closest_point_on_polygon(const PointT &p,
+                                        const PolygonT &poly) {
+  // If point is inside polygon, closest point is the point itself
+  if (bg::within(p, poly) || bg::covered_by(p, poly)) return p;
+  // Otherwise find closest point on boundary
+  PointT best = closest_point_on_ring<PointT>(p, poly.outer());
+  double best_dist_sq = [&]() {
+    double dx = bg::get<0>(best) - bg::get<0>(p);
+    double dy = bg::get<1>(best) - bg::get<1>(p);
+    return dx * dx + dy * dy;
+  }();
+  for (const auto &inner : poly.inners()) {
+    PointT cp = closest_point_on_ring<PointT>(p, inner);
+    double dx = bg::get<0>(cp) - bg::get<0>(p);
+    double dy = bg::get<1>(cp) - bg::get<1>(p);
+    double d2 = dx * dx + dy * dy;
+    if (d2 < best_dist_sq) { best_dist_sq = d2; best = cp; }
+  }
+  return best;
+}
+
+// Dispatches closest-point-on-g2 for a known source point type.
+template <typename PointT, typename Variant>
+static std::optional<PointT> closest_point_dispatch(const PointT &p,
+                                                     const Variant &g2) {
+  using LS = std::conditional_t<std::is_same_v<PointT, Point>, Linestring,
+                                 GeoLinestring>;
+  using Poly = std::conditional_t<std::is_same_v<PointT, Point>, Polygon,
+                                   GeoPolygon>;
+  using MPoly = std::conditional_t<std::is_same_v<PointT, Point>, MultiPolygon,
+                                    GeoMultiPolygon>;
+
+  if (auto *pt2 = std::get_if<PointT>(&g2)) return *pt2;
+  if (auto *ls = std::get_if<LS>(&g2))
+    return closest_point_on_linestring(p, *ls);
+  if (auto *poly = std::get_if<Poly>(&g2))
+    return closest_point_on_polygon(p, *poly);
+  if (auto *mpoly = std::get_if<MPoly>(&g2)) {
+    PointT best;
+    double best_d2 = std::numeric_limits<double>::max();
+    for (const auto &poly : *mpoly) {
+      PointT cp = closest_point_on_polygon(p, poly);
+      double dx = bg::get<0>(cp) - bg::get<0>(p);
+      double dy = bg::get<1>(cp) - bg::get<1>(p);
+      double d2 = dx * dx + dy * dy;
+      if (d2 < best_d2) { best_d2 = d2; best = cp; }
+    }
+    return best;
+  }
+  return std::nullopt;
+}
+
+// ----- stx_relate helpers (outside extern "C") -------------------------------
+// Build DE-9IM using basic boost predicates (intersects, within, covered_by,
+// touches, crosses, overlaps, equals) instead of bg::relation() which crashes
+// in MySQL plugin environment.
+
+// Build DE-9IM matrix string using basic predicates.
+// Only supports combinations where boost predicates are implemented.
+// Uses get_if dispatch to avoid instantiating unsupported template combinations.
+
+// Point-Point
+template <typename PointT>
+static std::string relate_pp(const PointT &p1, const PointT &p2) {
+  if (bg::equals(p1, p2)) return "0FFFFFFF2";
+  return "FF0FFF0F2";
+}
+
+// Point-LineString
+template <typename PointT, typename LinestringT>
+static std::string relate_pl(const PointT &p, const LinestringT &ls) {
+  if (!bg::intersects(p, ls)) return "FF0FFF102";
+  if (bg::covered_by(p, ls)) {
+    if (bg::touches(p, ls)) return "F0FFFF102";
+    return "0FFFFF102";
+  }
+  return "FF0FFF102";
+}
+
+// Point-Polygon
+template <typename PointT, typename PolygonT>
+static std::string relate_pa(const PointT &p, const PolygonT &poly) {
+  if (!bg::intersects(p, poly)) return "FF0FFF212";
+  if (bg::within(p, poly)) return "0FFFFF212";
+  if (bg::covered_by(p, poly)) return "F0FFFF212";
+  return "FF0FFF212";
+}
+
+// LineString-LineString
+template <typename LinestringT>
+static std::string relate_ll(const LinestringT &l1, const LinestringT &l2) {
+  if (!bg::intersects(l1, l2)) return "FF1FF0102";
+  if (bg::equals(l1, l2)) return "1FFF0FFF2";
+  if (bg::covered_by(l1, l2)) return "1FF0FF102";
+  if (bg::covered_by(l2, l1)) return "10F0FF1F2";
+  if (bg::touches(l1, l2)) return "FF10F0102";
+  return "0F1FF01F2";
+}
+
+// LineString-Polygon
+template <typename LinestringT, typename PolygonT>
+static std::string relate_la(const LinestringT &ls, const PolygonT &poly) {
+  if (!bg::intersects(ls, poly)) return "FF1FF0212";
+  if (bg::within(ls, poly)) return "1FF0FF212";
+  if (bg::covered_by(ls, poly)) return "1FF00F212";
+  if (bg::touches(ls, poly)) return "FF1F0F212";
+  return "1010F0212";
+}
+
+// Polygon-Polygon
+template <typename PolygonT>
+static std::string relate_aa(const PolygonT &p1, const PolygonT &p2) {
+  if (!bg::intersects(p1, p2)) return "FF2FF1212";
+  if (bg::equals(p1, p2)) return "2FFF1FFF2";
+  if (bg::within(p1, p2)) return "2FF1FF212";
+  if (bg::within(p2, p1)) return "212FF1FF2";
+  if (bg::touches(p1, p2)) return "FF2F11212";
+  return "212101212";
+}
+
+// Dispatch relate for Cartesian types using get_if (no std::visit).
+static std::string relate_cartesian(const CartesianVariant &v1,
+                                     const CartesianVariant &v2) {
+  auto *pt1 = std::get_if<Point>(&v1);
+  auto *ls1 = std::get_if<Linestring>(&v1);
+  auto *pg1 = std::get_if<Polygon>(&v1);
+  auto *pt2 = std::get_if<Point>(&v2);
+  auto *ls2 = std::get_if<Linestring>(&v2);
+  auto *pg2 = std::get_if<Polygon>(&v2);
+
+  if (pt1 && pt2) return relate_pp(*pt1, *pt2);
+  if (pt1 && ls2) return relate_pl(*pt1, *ls2);
+  if (pt1 && pg2) return relate_pa(*pt1, *pg2);
+  if (ls1 && pt2) { auto r = relate_pl(*pt2, *ls1); /* transpose */ return {r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]}; }
+  if (ls1 && ls2) return relate_ll(*ls1, *ls2);
+  if (ls1 && pg2) return relate_la(*ls1, *pg2);
+  if (pg1 && pt2) { auto r = relate_pa(*pt2, *pg1); return {r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]}; }
+  if (pg1 && ls2) { auto r = relate_la(*ls2, *pg1); return {r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]}; }
+  if (pg1 && pg2) return relate_aa(*pg1, *pg2);
+  return "FFFFFFFFF";
+}
+
+static std::string relate_geographic(const GeographicVariant &v1,
+                                      const GeographicVariant &v2) {
+  auto *pt1 = std::get_if<GeoPoint>(&v1);
+  auto *ls1 = std::get_if<GeoLinestring>(&v1);
+  auto *pg1 = std::get_if<GeoPolygon>(&v1);
+  auto *pt2 = std::get_if<GeoPoint>(&v2);
+  auto *ls2 = std::get_if<GeoLinestring>(&v2);
+  auto *pg2 = std::get_if<GeoPolygon>(&v2);
+
+  if (pt1 && pt2) return relate_pp(*pt1, *pt2);
+  if (pt1 && ls2) return relate_pl(*pt1, *ls2);
+  if (pt1 && pg2) return relate_pa(*pt1, *pg2);
+  if (ls1 && pt2) { auto r = relate_pl(*pt2, *ls1); return {r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]}; }
+  if (ls1 && ls2) return relate_ll(*ls1, *ls2);
+  if (ls1 && pg2) return relate_la(*ls1, *pg2);
+  if (pg1 && pt2) { auto r = relate_pa(*pt2, *pg1); return {r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]}; }
+  if (pg1 && ls2) { auto r = relate_la(*ls2, *pg1); return {r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]}; }
+  if (pg1 && pg2) return relate_aa(*pg1, *pg2);
+  return "FFFFFFFFF";
+}
+
+extern "C" {  // resume extern "C" for closestpoint/relate UDFs
+
+// ----- stx_closestpoint ------------------------------------------------------
+
+static bool stx_closestpoint_init(UDF_INIT *initid, UDF_ARGS *args,
+                                   char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_closestpoint() requires 2 arguments");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->max_length = 25;
+  return false;
+}
+
+static char *stx_closestpoint(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                               unsigned long *length, char *is_null,
+                               char *error) {
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+  auto two = parse_two_geoms(args);
+  if (!two) { *error = 1; return nullptr; }
+
+  std::string wkb;
+
+  if (auto *c1 = std::get_if<CartesianVariant>(&two->r1.geometry)) {
+    auto *c2 = std::get_if<CartesianVariant>(&two->r2.geometry);
+    if (!c2) { *error = 1; return nullptr; }
+    auto *pt1 = std::get_if<Point>(c1);
+    if (!pt1) { *error = 1; return nullptr; }  // g1 must be Point
+    auto cp = closest_point_dispatch<Point, CartesianVariant>(*pt1, *c2);
+    if (!cp) { *error = 1; return nullptr; }
+    wkb = write_point(two->r2.srid, *cp);
+  } else if (auto *g1 = std::get_if<GeographicVariant>(&two->r1.geometry)) {
+    auto *g2 = std::get_if<GeographicVariant>(&two->r2.geometry);
+    if (!g2) { *error = 1; return nullptr; }
+    auto *pt1 = std::get_if<GeoPoint>(g1);
+    if (!pt1) { *error = 1; return nullptr; }  // g1 must be Point
+    auto cp = closest_point_dispatch<GeoPoint, GeographicVariant>(*pt1, *g2);
+    if (!cp) { *error = 1; return nullptr; }
+    wkb = write_point(two->r2.srid, *cp);
+  } else {
+    *error = 1;
+    return nullptr;
+  }
+
+  *length = static_cast<unsigned long>(wkb.size());
+  std::memcpy(result, wkb.data(), wkb.size());
+  return result;
+}
+
+static void stx_closestpoint_deinit(UDF_INIT *) {}
+
+// ----- stx_relate ------------------------------------------------------------
+// Returns DE-9IM matrix string.
+
+static bool stx_relate_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_relate() requires 2 arguments");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->max_length = 9;
+  return false;
+}
+
+static char *stx_relate(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                         unsigned long *length, char *is_null, char *error) {
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+  auto two = parse_two_geoms(args);
+  if (!two) { *error = 1; return nullptr; }
+
+  std::string matrix_str;
+
+  if (auto *c1 = std::get_if<CartesianVariant>(&two->r1.geometry)) {
+    auto *c2 = std::get_if<CartesianVariant>(&two->r2.geometry);
+    if (!c2) { *error = 1; return nullptr; }
+    matrix_str = relate_cartesian(*c1, *c2);
+  } else if (auto *g1 = std::get_if<GeographicVariant>(&two->r1.geometry)) {
+    auto *g2 = std::get_if<GeographicVariant>(&two->r2.geometry);
+    if (!g2) { *error = 1; return nullptr; }
+    matrix_str = relate_geographic(*g1, *g2);
+  } else {
+    *error = 1;
+    return nullptr;
+  }
+
+  *length = static_cast<unsigned long>(matrix_str.size());
+  std::memcpy(result, matrix_str.data(), matrix_str.size());
+  return result;
+}
+
+static void stx_relate_deinit(UDF_INIT *) {}
+
+// ----- stx_relatematch -------------------------------------------------------
+
+static bool stx_relatematch_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 3) {
+    strcpy(msg,
+           "stx_relatematch() requires 3 arguments (geom1, geom2, pattern)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  args->arg_type[2] = STRING_RESULT;
+  initid->maybe_null = 1;
+  return false;
+}
+
+static long long stx_relatematch(UDF_INIT *, UDF_ARGS *args, char *is_null,
+                                  char *error) {
+  if (!args->args[0] || !args->args[1] || !args->args[2]) {
+    *is_null = 1;
+    return 0;
+  }
+
+  const char *pattern = args->args[2];
+  size_t pat_len = args->lengths[2];
+
+  auto r1 = parse_geometry(args->args[0], args->lengths[0]);
+  auto r2 = parse_geometry(args->args[1], args->lengths[1]);
+  if (!r1 || !r2) { *error = 1; return 0; }
+
+  bool both_cart = std::holds_alternative<CartesianVariant>(r1->geometry) &&
+                   std::holds_alternative<CartesianVariant>(r2->geometry);
+  bool both_geo = std::holds_alternative<GeographicVariant>(r1->geometry) &&
+                  std::holds_alternative<GeographicVariant>(r2->geometry);
+  if (!both_cart && !both_geo) { *error = 1; return 0; }
+
+  std::string matrix_str;
+
+  if (both_cart) {
+    auto *c1 = std::get_if<CartesianVariant>(&r1->geometry);
+    auto *c2 = std::get_if<CartesianVariant>(&r2->geometry);
+    matrix_str = relate_cartesian(*c1, *c2);
+  } else {
+    auto *g1 = std::get_if<GeographicVariant>(&r1->geometry);
+    auto *g2 = std::get_if<GeographicVariant>(&r2->geometry);
+    matrix_str = relate_geographic(*g1, *g2);
+  }
+
+  return de9im_match(matrix_str, pattern, pat_len) ? 1 : 0;
+}
+
+static void stx_relatematch_deinit(UDF_INIT *) {}
+
 }  // extern "C"
 
 // =============================================================================
@@ -930,6 +1489,16 @@ static const udf_entry udf_table[] = {
      stx_scale_deinit},
     {"stx_rotate", STRING_RESULT, (Udf_func_any)stx_rotate, stx_rotate_init,
      stx_rotate_deinit},
+    {"stx_reverse", STRING_RESULT, (Udf_func_any)stx_reverse,
+     stx_reverse_init, stx_reverse_deinit},
+    {"stx_pointonsurface", STRING_RESULT, (Udf_func_any)stx_pointonsurface,
+     stx_pointonsurface_init, stx_pointonsurface_deinit},
+    {"stx_closestpoint", STRING_RESULT, (Udf_func_any)stx_closestpoint,
+     stx_closestpoint_init, stx_closestpoint_deinit},
+    {"stx_relate", STRING_RESULT, (Udf_func_any)stx_relate, stx_relate_init,
+     stx_relate_deinit},
+    {"stx_relatematch", INT_RESULT, (Udf_func_any)stx_relatematch,
+     stx_relatematch_init, stx_relatematch_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 
@@ -995,7 +1564,7 @@ mysql_declare_plugin(spatial_plugin){
     spatial_plugin_init,
     nullptr,
     spatial_plugin_deinit,
-    0x0300,  // version 3.0
+    0x0400,  // version 4.0
     nullptr,
     nullptr,
     nullptr,

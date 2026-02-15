@@ -529,6 +529,167 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- stx_reverse
+-- =============================================================================
+
+CALL assert_eq_text(
+  'reverse: linestring',
+  ST_AsText(stx_reverse(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)'))),
+  'LINESTRING(2 2,1 1,0 0)');
+
+CALL assert_eq_text(
+  'reverse: multipoint (unordered, unchanged)',
+  ST_AsText(stx_reverse(ST_GeomFromText('MULTIPOINT((0 0),(1 1),(2 2))'))),
+  'MULTIPOINT((0 0),(1 1),(2 2))');
+
+CALL assert_eq_text(
+  'reverse: geographic linestring',
+  ST_AsText(stx_reverse(ST_GeomFromText('LINESTRING(0 0, 1 0, 1 1)', 4326))),
+  'LINESTRING(1 1,1 0,0 0)');
+
+CALL assert_eq_text(
+  'reverse: NULL input returns NULL',
+  ST_AsText(stx_reverse(NULL)),
+  NULL);
+
+-- =============================================================================
+-- stx_pointonsurface
+-- =============================================================================
+
+CALL assert_eq_text(
+  'pointonsurface: square centroid',
+  ST_AsText(stx_pointonsurface(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  'POINT(5 5)');
+
+-- L-shaped concave polygon: centroid is outside, should find interior point
+CALL assert_eq_int(
+  'pointonsurface: L-shape is inside',
+  stx_coveredby(
+    stx_pointonsurface(ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))')),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))')),
+  1);
+
+CALL assert_eq_text(
+  'pointonsurface: NULL input returns NULL',
+  ST_AsText(stx_pointonsurface(NULL)),
+  NULL);
+
+-- =============================================================================
+-- stx_closestpoint
+-- =============================================================================
+
+CALL assert_eq_text(
+  'closestpoint: point to linestring',
+  ST_AsText(stx_closestpoint(
+    ST_GeomFromText('POINT(5 5)'),
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'))),
+  'POINT(5 0)');
+
+CALL assert_eq_text(
+  'closestpoint: point to polygon boundary',
+  ST_AsText(stx_closestpoint(
+    ST_GeomFromText('POINT(15 5)'),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  'POINT(10 5)');
+
+CALL assert_eq_text(
+  'closestpoint: point inside polygon returns self',
+  ST_AsText(stx_closestpoint(
+    ST_GeomFromText('POINT(5 5)'),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  'POINT(5 5)');
+
+CALL assert_eq_text(
+  'closestpoint: point to point',
+  ST_AsText(stx_closestpoint(
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(3 4)'))),
+  'POINT(3 4)');
+
+CALL assert_eq_text(
+  'closestpoint: NULL input returns NULL',
+  ST_AsText(stx_closestpoint(NULL, ST_GeomFromText('POINT(0 0)'))),
+  NULL);
+
+-- =============================================================================
+-- stx_relate
+-- =============================================================================
+
+CALL assert_eq_text(
+  'relate: point inside polygon',
+  stx_relate(
+    ST_GeomFromText('POINT(5 5)'),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')),
+  '0FFFFF212');
+
+CALL assert_eq_text(
+  'relate: disjoint polygons',
+  stx_relate(
+    ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'),
+    ST_GeomFromText('POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))')),
+  'FF2FF1212');
+
+CALL assert_eq_text(
+  'relate: equal points',
+  stx_relate(
+    ST_GeomFromText('POINT(1 1)'),
+    ST_GeomFromText('POINT(1 1)')),
+  '0FFFFFFF2');
+
+CALL assert_eq_text(
+  'relate: disjoint points',
+  stx_relate(
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(1 1)')),
+  'FF0FFF0F2');
+
+CALL assert_eq_text(
+  'relate: NULL input returns NULL',
+  stx_relate(NULL, ST_GeomFromText('POINT(0 0)')),
+  NULL);
+
+-- =============================================================================
+-- stx_relatematch
+-- =============================================================================
+
+CALL assert_eq_int(
+  'relatematch: within pattern (T*F**F***)',
+  stx_relatematch(
+    ST_GeomFromText('POINT(5 5)'),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    'T*F**F***'),
+  1);
+
+CALL assert_eq_int(
+  'relatematch: intersects pattern (T********)',
+  stx_relatematch(
+    ST_GeomFromText('POINT(5 5)'),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    'T********'),
+  1);
+
+CALL assert_eq_int(
+  'relatematch: disjoint pattern (FF*FF****)',
+  stx_relatematch(
+    ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'),
+    ST_GeomFromText('POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))'),
+    'FF*FF****'),
+  1);
+
+CALL assert_eq_int(
+  'relatematch: not within (negative)',
+  stx_relatematch(
+    ST_GeomFromText('POINT(15 15)'),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    'T*F**F***'),
+  0);
+
+CALL assert_eq_int(
+  'relatematch: NULL input returns NULL',
+  stx_relatematch(NULL, ST_GeomFromText('POINT(0 0)'), 'T*F**F***'),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

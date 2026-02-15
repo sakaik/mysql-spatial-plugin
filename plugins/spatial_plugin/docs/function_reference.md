@@ -50,6 +50,11 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [stx_translate](#stx_translate) | GEOMETRY | 平行移動 / Translates a geometry by dx, dy |
 | [stx_scale](#stx_scale) | GEOMETRY | スケール変換 / Scales a geometry by sx, sy |
 | [stx_rotate](#stx_rotate) | GEOMETRY | 回転 / Rotates a geometry by angle |
+| [stx_reverse](#stx_reverse) | GEOMETRY | 頂点順逆転 / Reverses vertex order |
+| [stx_pointonsurface](#stx_pointonsurface) | GEOMETRY | 内部保証点 / Guaranteed interior point |
+| [stx_closestpoint](#stx_closestpoint) | GEOMETRY | 最近接点 / Closest point on geometry |
+| [stx_relate](#stx_relate) | STRING | DE-9IM 行列 / DE-9IM matrix string |
+| [stx_relatematch](#stx_relatematch) | INTEGER | DE-9IM パターン判定 / DE-9IM pattern match |
 
 ---
 
@@ -682,14 +687,279 @@ Rotation center is the origin (0, 0). To rotate around a different center, use `
 
 ---
 
+### stx_reverse
+
+ジオメトリの頂点順序を逆転する。
+Reverses the vertex order of a geometry.
+
+```sql
+stx_reverse(geometry) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+
+#### 戻り値 (Return Value)
+
+頂点順序を逆転したジオメトリ（入力と同じ型・SRID）。LineString, Polygon（外環・内環）に有効。MultiPoint は順序の概念がないため変化しない。
+A geometry with reversed vertex order (same type and SRID). Effective for LineString, Polygon (outer/inner rings). MultiPoint has no ordering so remains unchanged.
+
+#### 使用例 (Examples)
+
+```sql
+-- ラインの逆転 / Reverse a linestring
+SELECT ST_AsText(stx_reverse(
+  ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)')));
+-- LINESTRING(2 2,1 1,0 0)
+
+-- Geographic / Geographic linestring
+SELECT ST_AsText(stx_reverse(
+  ST_GeomFromText('LINESTRING(0 0, 1 0, 1 1)', 4326)));
+-- LINESTRING(1 1,1 0,0 0)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Reverse()`
+
+---
+
+### stx_pointonsurface
+
+ポリゴン（またはマルチポリゴン）の内部に位置することが保証された点を返す。
+Returns a point guaranteed to lie in the interior of a polygon (or multipolygon).
+
+```sql
+stx_pointonsurface(geometry) -> GEOMETRY (Point)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | Polygon または MultiPolygon / Polygon or MultiPolygon |
+
+#### 戻り値 (Return Value)
+
+ポリゴン内部にある Point ジオメトリ（入力と同じ SRID）。凹型ポリゴンでも内部に位置する点を返す。MultiPolygon の場合は最大面積のポリゴンを使用。
+A Point inside the polygon (same SRID as input). Returns an interior point even for concave polygons. For MultiPolygon, uses the largest polygon by area.
+
+#### アルゴリズム (Algorithm)
+
+1. ポリゴン頂点の座標平均（重心近似）を計算
+2. 重心がポリゴン内部にあればそれを返す
+3. 重心が外部の場合（凹型等）、重心のY座標での水平線スキャンで内部点を探索
+
+#### 使用例 (Examples)
+
+```sql
+-- 正方形の重心 / Centroid of a square
+SELECT ST_AsText(stx_pointonsurface(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- POINT(5 5)
+
+-- L字型凹ポリゴン（重心は外部だが、内部点を返す）
+-- L-shaped concave polygon (centroid is outside, but returns interior point)
+SELECT ST_AsText(stx_pointonsurface(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))')));
+-- POINT(2.5 5)
+
+-- 結果は必ずポリゴン内部にある / Result is always inside the polygon
+SELECT stx_coveredby(
+  stx_pointonsurface(ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))')),
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))'));
+-- 1
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_PointOnSurface()`
+
+---
+
+### stx_closestpoint
+
+第1引数の点から、第2引数のジオメトリ上で最も近い点を返す。
+Returns the closest point on geometry2 to the given point (geometry1).
+
+```sql
+stx_closestpoint(point, geometry) -> GEOMETRY (Point)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| point | POINT | 基準点 / Reference point (must be Point type) |
+| geometry | GEOMETRY | 対象ジオメトリ / Target geometry |
+
+#### 戻り値 (Return Value)
+
+第2引数のジオメトリ上（または内部）で最も近い Point。点がポリゴン内部にある場合は入力点そのものを返す。
+The closest Point on (or inside) geometry2. If the point is inside a polygon, returns the point itself.
+
+#### 対応するジオメトリ型 (Supported Types for geometry2)
+
+Point, LineString, Polygon, MultiPolygon
+
+#### 使用例 (Examples)
+
+```sql
+-- 点からラインへの最近接点 / Closest point on line
+SELECT ST_AsText(stx_closestpoint(
+  ST_GeomFromText('POINT(5 5)'),
+  ST_GeomFromText('LINESTRING(0 0, 10 0)')));
+-- POINT(5 0)
+
+-- 点からポリゴン境界への最近接点 / Closest point on polygon boundary
+SELECT ST_AsText(stx_closestpoint(
+  ST_GeomFromText('POINT(15 5)'),
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- POINT(10 5)
+
+-- 点がポリゴン内部 → 自身を返す / Point inside polygon -> returns self
+SELECT ST_AsText(stx_closestpoint(
+  ST_GeomFromText('POINT(5 5)'),
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- POINT(5 5)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_ClosestPoint()`
+
+---
+
+### stx_relate
+
+2つのジオメトリの空間関係を DE-9IM（Dimensionally Extended 9-Intersection Model）行列文字列として返す。
+Returns the DE-9IM matrix string describing the spatial relationship between two geometries.
+
+```sql
+stx_relate(geometry1, geometry2) -> STRING (9 chars)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry1 | GEOMETRY | 1つ目のジオメトリ / First geometry |
+| geometry2 | GEOMETRY | 2つ目のジオメトリ / Second geometry |
+
+#### 戻り値 (Return Value)
+
+9文字の DE-9IM 行列文字列。各文字は交差の次元を表す: `F`（空）、`0`（点）、`1`（線）、`2`（面）。
+A 9-character DE-9IM matrix string. Each character represents the dimension of the intersection: `F` (empty), `0` (point), `1` (line), `2` (area).
+
+行列の各位置:
+Matrix positions: `II IB IE BI BB BE EI EB EE` (I=Interior, B=Boundary, E=Exterior)
+
+#### 対応するジオメトリ型 (Supported Type Combinations)
+
+Point, LineString, Polygon の全組み合わせ。
+All combinations of Point, LineString, and Polygon.
+
+#### 使用例 (Examples)
+
+```sql
+-- 点がポリゴン内部 / Point inside polygon
+SELECT stx_relate(
+  ST_GeomFromText('POINT(5 5)'),
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'));
+-- 0FFFFF212
+
+-- 離散ポリゴン / Disjoint polygons
+SELECT stx_relate(
+  ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'),
+  ST_GeomFromText('POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))'));
+-- FF2FF1212
+
+-- 同一点 / Equal points
+SELECT stx_relate(
+  ST_GeomFromText('POINT(1 1)'),
+  ST_GeomFromText('POINT(1 1)'));
+-- 0FFFFFFF2
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Relate()`
+- MySQL 標準: なし
+
+---
+
+### stx_relatematch
+
+2つのジオメトリの DE-9IM 行列が指定したパターンに一致するかを判定する。
+Tests whether the DE-9IM matrix of two geometries matches a given pattern.
+
+```sql
+stx_relatematch(geometry1, geometry2, pattern) -> INTEGER
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry1 | GEOMETRY | 1つ目のジオメトリ / First geometry |
+| geometry2 | GEOMETRY | 2つ目のジオメトリ / Second geometry |
+| pattern | STRING | DE-9IM パターン文字列（9文字） / DE-9IM pattern string (9 chars) |
+
+パターン文字: `T`（≠F: 交差あり）, `F`（交差なし）, `*`（任意）, `0`/`1`/`2`（次元一致）
+Pattern characters: `T` (non-empty intersection), `F` (empty), `*` (any), `0`/`1`/`2` (exact dimension)
+
+#### 戻り値 (Return Value)
+
+- `1`: パターンに一致 / Pattern matches
+- `0`: パターンに不一致 / Pattern does not match
+
+#### 代表的なパターン (Common Patterns)
+
+| 関係 (Relation) | パターン (Pattern) |
+|---|---|
+| Within | `T*F**F***` |
+| Contains | `T*****FF*` |
+| Intersects | `T********` |
+| Disjoint | `FF*FF****` |
+| Touches | `FT******* ` or `F**T***** ` or `F***T****` |
+| Overlaps (area) | `T*T***T**` |
+
+#### 使用例 (Examples)
+
+```sql
+-- Within 判定 / Test within
+SELECT stx_relatematch(
+  ST_GeomFromText('POINT(5 5)'),
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+  'T*F**F***');
+-- 1
+
+-- Disjoint 判定 / Test disjoint
+SELECT stx_relatematch(
+  ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'),
+  ST_GeomFromText('POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))'),
+  'FF*FF****');
+-- 1
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_RelateMatch()`
+- MySQL 標準: なし
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全12関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 12 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全17関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 17 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -717,6 +987,11 @@ ORDER BY UDF_NAME;
 | stx_rotate                | char            |
 | stx_scale                 | char            |
 | stx_translate             | char            |
+| stx_closestpoint          | char            |
+| stx_pointonsurface        | char            |
+| stx_relate                | char            |
+| stx_relatematch           | integer         |
+| stx_reverse               | char            |
 +---------------------------+-----------------+
 ```
 
