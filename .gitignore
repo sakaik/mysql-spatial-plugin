@@ -3,11 +3,14 @@ mysql960/*
 !mysql960/.gitkeep
 mysql960.source/*
 !mysql960.source/.gitkeep
-mysql-9.6.0-linux-glibc2.28-x86_64.tar.xz
-mysql-9.6.0.tar.gz
+mysql-*.tar.xz
+mysql-*.tar.gz
 
-# Claude local workspace (managed in separate local repo)
+# Dev-only files (kept in local claude/ repo)
+CLAUDE.md
 claude/
+plugins/my_calc_plugin/
+local.mk
 
 # Build artifacts
 *.o

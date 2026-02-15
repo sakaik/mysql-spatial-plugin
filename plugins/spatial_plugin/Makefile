@@ -16,7 +16,9 @@ CXXFLAGS = -shared -fPIC -std=c++17 -O2 \
 TARGET = spatial_plugin.so
 SOURCES = spatial_plugin.cc ../gis_lib/wkb_parser.cc
 
-MYSQL = $(MYSQL_BINARY)/bin/mysql --socket=$(MYSQL_BINARY)/mysql.sock -u root -p'MySQL9.6'
+MYSQL = $(MYSQL_BINARY)/bin/mysql --socket=$(MYSQL_BINARY)/mysql.sock -u root
+
+-include local.mk
 
 .PHONY: all install clean generate-srids test reload
 
