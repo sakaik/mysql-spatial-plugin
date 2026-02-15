@@ -855,15 +855,24 @@ static void stx_scale_deinit(UDF_INIT *initid) {
 }
 
 // ----- stx_rotate ------------------------------------------------------------
-// Rotates a geometry by angle (radians) around the origin.
+// Rotates a geometry by angle (radians).
+// 2 args: (geometry, angle) — rotate around origin
+// 3 args: (geometry, angle, center_point) — rotate around POINT geometry
+// 4 args: (geometry, angle, cx, cy) — rotate around point (cx, cy)
 
 static bool stx_rotate_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
-  if (args->arg_count != 2) {
-    strcpy(msg, "stx_rotate() requires 2 arguments (geometry, angle)");
+  if (args->arg_count < 2 || args->arg_count > 4) {
+    strcpy(msg, "stx_rotate() requires 2-4 arguments (geometry, angle[, center_point | cx, cy])");
     return true;
   }
   args->arg_type[0] = STRING_RESULT;
   args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count == 3) {
+    args->arg_type[2] = STRING_RESULT;  // POINT geometry
+  } else if (args->arg_count == 4) {
+    args->arg_type[2] = REAL_RESULT;
+    args->arg_type[3] = REAL_RESULT;
+  }
   initid->maybe_null = 1;
   initid->ptr = nullptr;
   return false;
@@ -881,13 +890,41 @@ static char *stx_rotate(UDF_INIT *initid, UDF_ARGS *args, char *result,
   double angle = *reinterpret_cast<double *>(args->args[1]);
   double cos_a = std::cos(angle);
   double sin_a = std::sin(angle);
+  double cx = 0.0, cy = 0.0;
+
+  if (args->arg_count == 3) {
+    if (!args->args[2]) { *is_null = 1; return nullptr; }
+    auto cp = parse_geometry(args->args[2], args->lengths[2]);
+    if (!cp) { *error = 1; return nullptr; }
+    if (cp->srid != r->srid) {
+      // SRID mismatch — return error
+      *error = 1;
+      return nullptr;
+    }
+    // Extract coordinates from the center point
+    if (auto *cv = std::get_if<CartesianVariant>(&cp->geometry)) {
+      auto *pt = std::get_if<Point>(cv);
+      if (!pt) { *error = 1; return nullptr; }  // not a POINT
+      cx = bg::get<0>(*pt);
+      cy = bg::get<1>(*pt);
+    } else if (auto *gv = std::get_if<GeographicVariant>(&cp->geometry)) {
+      auto *pt = std::get_if<GeoPoint>(gv);
+      if (!pt) { *error = 1; return nullptr; }  // not a POINT
+      cx = bg::get<0>(*pt);
+      cy = bg::get<1>(*pt);
+    }
+  } else if (args->arg_count == 4) {
+    if (!args->args[2] || !args->args[3]) { *is_null = 1; return nullptr; }
+    cx = *reinterpret_cast<double *>(args->args[2]);
+    cy = *reinterpret_cast<double *>(args->args[3]);
+  }
 
   auto wkb =
-      transform_and_write(*r, [cos_a, sin_a](double &x, double &y) {
-        double nx = x * cos_a - y * sin_a;
-        double ny = x * sin_a + y * cos_a;
-        x = nx;
-        y = ny;
+      transform_and_write(*r, [cos_a, sin_a, cx, cy](double &x, double &y) {
+        double dx = x - cx;
+        double dy = y - cy;
+        x = cx + dx * cos_a - dy * sin_a;
+        y = cy + dx * sin_a + dy * cos_a;
       });
   if (wkb.empty()) { *error = 1; return nullptr; }
   return return_wkb(initid, wkb, result, length);
