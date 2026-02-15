@@ -13,6 +13,8 @@
 #include <cmath>
 #include <string>
 
+#include "plugin_version.h"
+
 #include <boost/geometry/algorithms/area.hpp>
 #include <boost/geometry/algorithms/covered_by.hpp>
 #include <boost/geometry/algorithms/distance.hpp>
@@ -1543,7 +1545,11 @@ static const udf_entry udf_table[] = {
 // Plugin init / deinit
 // =============================================================================
 
+static void build_status_info();  // forward declaration
+
 static int spatial_plugin_init(void *p [[maybe_unused]]) {
+  build_status_info();
+
   SERVICE_TYPE(registry) *reg = mysql_plugin_registry_acquire();
   if (!reg) return 1;
 
@@ -1585,6 +1591,44 @@ static int spatial_plugin_deinit(void *p [[maybe_unused]]) {
 }
 
 // =============================================================================
+// Status variables (SHOW STATUS LIKE 'spatial_plugin_%')
+// =============================================================================
+
+static char stx_function_list[1024];
+static long stx_function_count;
+
+static void build_status_info() {
+  stx_function_list[0] = '\0';
+  stx_function_count = 0;
+  size_t pos = 0;
+  for (const udf_entry *e = udf_table; e->name; ++e) {
+    stx_function_count++;
+    if (pos > 0 && pos < sizeof(stx_function_list) - 1)
+      stx_function_list[pos++] = ',';
+    size_t nlen = strlen(e->name);
+    if (pos + nlen < sizeof(stx_function_list) - 1) {
+      memcpy(stx_function_list + pos, e->name, nlen);
+      pos += nlen;
+    }
+  }
+  stx_function_list[pos] = '\0';
+}
+
+static SHOW_VAR spatial_status_vars[] = {
+    {"spatial_plugin_version", const_cast<char *>(STX_PLUGIN_VERSION),
+     SHOW_CHAR, SHOW_SCOPE_GLOBAL},
+    {"spatial_plugin_requires", const_cast<char *>(STX_PLUGIN_REQUIRES),
+     SHOW_CHAR, SHOW_SCOPE_GLOBAL},
+    {"spatial_plugin_built_for", const_cast<char *>(MYSQL_SERVER_VERSION),
+     SHOW_CHAR, SHOW_SCOPE_GLOBAL},
+    {"spatial_plugin_function_count", (char *)&stx_function_count, SHOW_LONG,
+     SHOW_SCOPE_GLOBAL},
+    {"spatial_plugin_functions", stx_function_list, SHOW_CHAR,
+     SHOW_SCOPE_GLOBAL},
+    {nullptr, nullptr, SHOW_UNDEF, SHOW_SCOPE_UNDEF},
+};
+
+// =============================================================================
 // DAEMON plugin declaration
 // =============================================================================
 
@@ -1595,14 +1639,14 @@ mysql_declare_plugin(spatial_plugin){
     MYSQL_DAEMON_PLUGIN,
     &spatial_daemon_handler,
     "spatial_plugin",
-    "STX Spatial Extensions",
-    "Spatial functions (stx_*) via boost::geometry",
+    STX_PLUGIN_AUTHOR,
+    STX_PLUGIN_DESCRIPTION,
     PLUGIN_LICENSE_GPL,
     spatial_plugin_init,
     nullptr,
     spatial_plugin_deinit,
-    0x0400,  // version 4.0
-    nullptr,
+    STX_PLUGIN_VERSION_HEX,
+    spatial_status_vars,
     nullptr,
     nullptr,
     0,

@@ -22,7 +22,7 @@ MYSQL = $(MYSQL_BINARY)/bin/mysql --socket=$(MYSQL_BINARY)/mysql.sock -u root -p
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCES) ../gis_lib/wkb_parser.h ../gis_lib/geometry_types.h ../gis_lib/geographic_srids.h
+$(TARGET): $(SOURCES) ../gis_lib/wkb_parser.h ../gis_lib/geometry_types.h ../gis_lib/geographic_srids.h plugin_version.h
 	$(CXX) $(CXXFLAGS) -o $@ $(SOURCES) -L $(MYSQL_BINARY)/lib -lmysqlservices
 
 install: $(TARGET)
