@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
+#include <sstream>
 #include <string>
 
 #include "plugin_version.h"
@@ -21,10 +23,14 @@
 #include <boost/geometry/algorithms/equals.hpp>
 #include <boost/geometry/algorithms/intersects.hpp>
 #include <boost/geometry/algorithms/length.hpp>
+#include <boost/geometry/algorithms/densify.hpp>
+#include <boost/geometry/algorithms/envelope.hpp>
 #include <boost/geometry/algorithms/perimeter.hpp>
 #include <boost/geometry/algorithms/reverse.hpp>
 #include <boost/geometry/algorithms/touches.hpp>
+#include <boost/geometry/algorithms/unique.hpp>
 #include <boost/geometry/algorithms/within.hpp>
+#include <boost/geometry/io/wkt/wkt.hpp>
 #include <boost/geometry/formulas/vincenty_direct.hpp>
 #include <boost/geometry/formulas/vincenty_inverse.hpp>
 #include <boost/geometry/srs/spheroid.hpp>
@@ -1489,6 +1495,1176 @@ static long long stx_relatematch(UDF_INIT *, UDF_ARGS *args, char *is_null,
 
 static void stx_relatematch_deinit(UDF_INIT *) {}
 
+// ----- stx_makepoint ---------------------------------------------------------
+// Creates a POINT geometry from coordinates: stx_makepoint(x, y [, srid])
+
+static bool stx_makepoint_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 3) {
+    strcpy(msg, "stx_makepoint() requires 2 or 3 arguments (x, y [, srid])");
+    return true;
+  }
+  args->arg_type[0] = REAL_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count == 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->max_length = 25;
+  return false;
+}
+
+static char *stx_makepoint(UDF_INIT *, UDF_ARGS *args, char *result,
+                            unsigned long *length, char *is_null, char *) {
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+  if (args->arg_count == 3 && !args->args[2]) { *is_null = 1; return nullptr; }
+  double x = *reinterpret_cast<double *>(args->args[0]);
+  double y = *reinterpret_cast<double *>(args->args[1]);
+  uint32_t srid = 0;
+  if (args->arg_count == 3)
+    srid = static_cast<uint32_t>(*reinterpret_cast<long long *>(args->args[2]));
+  auto wkb = write_point_wkb(srid, x, y);
+  *length = static_cast<unsigned long>(wkb.size());
+  std::memcpy(result, wkb.data(), wkb.size());
+  return result;
+}
+
+static void stx_makepoint_deinit(UDF_INIT *) {}
+
+// ----- stx_affine ------------------------------------------------------------
+// General 2D affine transformation:
+//   x' = a*x + b*y + xoff
+//   y' = d*x + e*y + yoff
+// stx_affine(geom, a, b, d, e, xoff, yoff)
+
+static bool stx_affine_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 7) {
+    strcpy(msg,
+           "stx_affine() requires 7 arguments (geom, a, b, d, e, xoff, yoff)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  for (unsigned i = 1; i <= 6; ++i) args->arg_type[i] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_affine(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                          unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  for (unsigned i = 0; i < 7; ++i) {
+    if (!args->args[i]) { *is_null = 1; return nullptr; }
+  }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double a    = *reinterpret_cast<double *>(args->args[1]);
+  double b    = *reinterpret_cast<double *>(args->args[2]);
+  double d    = *reinterpret_cast<double *>(args->args[3]);
+  double e    = *reinterpret_cast<double *>(args->args[4]);
+  double xoff = *reinterpret_cast<double *>(args->args[5]);
+  double yoff = *reinterpret_cast<double *>(args->args[6]);
+
+  auto wkb =
+      transform_and_write(*r, [a, b, d, e, xoff, yoff](double &x, double &y) {
+        double nx = a * x + b * y + xoff;
+        double ny = d * x + e * y + yoff;
+        x = nx;
+        y = ny;
+      });
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_affine_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_snaptogrid --------------------------------------------------------
+// Snaps coordinates to a grid: stx_snaptogrid(geom, size)
+//   or stx_snaptogrid(geom, size_x, size_y)
+
+static bool stx_snaptogrid_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_snaptogrid() requires 2 or 3 arguments (geom, size [, size_y])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count == 3) args->arg_type[2] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_snaptogrid(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+  if (args->arg_count == 3 && !args->args[2]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double sx = *reinterpret_cast<double *>(args->args[1]);
+  double sy = (args->arg_count == 3)
+                  ? *reinterpret_cast<double *>(args->args[2])
+                  : sx;
+
+  auto wkb = transform_and_write(*r, [sx, sy](double &x, double &y) {
+    if (sx != 0.0) x = std::round(x / sx) * sx;
+    if (sy != 0.0) y = std::round(y / sy) * sy;
+  });
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_snaptogrid_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+}  // extern "C" (pause for removerepeatedpoints/segmentize/generatepoints templates)
+
+// ----- stx_removerepeatedpoints helpers --------------------------------------
+
+// Remove consecutive points within tolerance distance from a range.
+template <typename Container>
+static void remove_repeated_with_tolerance(Container &pts, double tol2,
+                                           size_t min_keep) {
+  if (pts.size() <= min_keep) return;
+  Container out;
+  out.push_back(pts[0]);
+  for (size_t i = 1; i < pts.size(); ++i) {
+    double dx = bg::get<0>(pts[i]) - bg::get<0>(out.back());
+    double dy = bg::get<1>(pts[i]) - bg::get<1>(out.back());
+    if (dx * dx + dy * dy > tol2) {
+      out.push_back(pts[i]);
+    }
+  }
+  // For rings: always keep closing point identical to first
+  if (out.size() >= 2 && min_keep >= 4) {
+    auto &first = out.front();
+    auto &last = out.back();
+    if (bg::get<0>(first) != bg::get<0>(last) ||
+        bg::get<1>(first) != bg::get<1>(last)) {
+      out.push_back(first);
+    }
+  }
+  if (out.size() < min_keep) return;  // don't reduce below minimum
+  pts = std::move(out);
+}
+
+// Apply remove-repeated to a full geometry (tolerance version).
+template <typename Variant>
+static void remove_repeated_variant(Variant &v, double tol2) {
+  std::visit(
+      [tol2](auto &g) {
+        using T = std::decay_t<decltype(g)>;
+        if constexpr (std::is_same_v<T, Linestring> ||
+                      std::is_same_v<T, GeoLinestring>) {
+          remove_repeated_with_tolerance(g, tol2, 2);
+        } else if constexpr (std::is_same_v<T, Polygon> ||
+                              std::is_same_v<T, GeoPolygon>) {
+          remove_repeated_with_tolerance(g.outer(), tol2, 4);
+          for (auto &ring : g.inners())
+            remove_repeated_with_tolerance(ring, tol2, 4);
+        } else if constexpr (std::is_same_v<T, MultiLinestring> ||
+                              std::is_same_v<T, GeoMultiLinestring>) {
+          for (auto &ls : g)
+            remove_repeated_with_tolerance(ls, tol2, 2);
+        } else if constexpr (std::is_same_v<T, MultiPolygon> ||
+                              std::is_same_v<T, GeoMultiPolygon>) {
+          for (auto &poly : g) {
+            remove_repeated_with_tolerance(poly.outer(), tol2, 4);
+            for (auto &ring : poly.inners())
+              remove_repeated_with_tolerance(ring, tol2, 4);
+          }
+        }
+        // Point/MultiPoint: no repeated points to remove
+      },
+      v);
+}
+
+// Densify (segmentize) helper: apply bg::densify per geometry type.
+template <typename Variant>
+static std::string densify_and_write(uint32_t srid, const Variant &v,
+                                     double max_length) {
+  return std::visit(
+      [srid, max_length](const auto &g) -> std::string {
+        using T = std::decay_t<decltype(g)>;
+        // Point types: no edges to densify, return as-is
+        if constexpr (std::is_same_v<T, Point> || std::is_same_v<T, GeoPoint> ||
+                      std::is_same_v<T, MultiPoint> ||
+                      std::is_same_v<T, GeoMultiPoint>) {
+          return write_geometry(srid, Variant(g));
+        } else {
+          T out;
+          bg::densify(g, out, max_length);
+          return write_geometry(srid, Variant(out));
+        }
+      },
+      v);
+}
+
+// Generate random points inside a polygon using rejection sampling.
+template <typename PointT, typename PolygonT, typename MultiPointT>
+static MultiPointT generate_points_impl(const PolygonT &poly, int npoints,
+                                        std::mt19937 &rng) {
+  using BoxT = bg::model::box<PointT>;
+  BoxT box;
+  bg::envelope(poly, box);
+  double minx = bg::get<bg::min_corner, 0>(box);
+  double miny = bg::get<bg::min_corner, 1>(box);
+  double maxx = bg::get<bg::max_corner, 0>(box);
+  double maxy = bg::get<bg::max_corner, 1>(box);
+
+  std::uniform_real_distribution<double> dist_x(minx, maxx);
+  std::uniform_real_distribution<double> dist_y(miny, maxy);
+
+  MultiPointT result;
+  int max_attempts = npoints * 1000;
+  int attempts = 0;
+  int found = 0;
+  while (found < npoints && attempts < max_attempts) {
+    PointT pt;
+    bg::set<0>(pt, dist_x(rng));
+    bg::set<1>(pt, dist_y(rng));
+    if (bg::within(pt, poly)) {
+      result.push_back(pt);
+      ++found;
+    }
+    ++attempts;
+  }
+  return result;
+}
+
+extern "C" {  // resume extern "C"
+
+// ----- stx_removerepeatedpoints ----------------------------------------------
+// Removes consecutive duplicate vertices.
+// stx_removerepeatedpoints(geom) or stx_removerepeatedpoints(geom, tolerance)
+
+static bool stx_removerepeatedpoints_init(UDF_INIT *initid, UDF_ARGS *args,
+                                           char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 2) {
+    strcpy(msg,
+           "stx_removerepeatedpoints() requires 1 or 2 arguments "
+           "(geom [, tolerance])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count == 2) args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_removerepeatedpoints(UDF_INIT *initid, UDF_ARGS *args,
+                                       char *result, unsigned long *length,
+                                       char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  if (args->arg_count == 2 && !args->args[1]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  double tolerance = 0.0;
+  if (args->arg_count == 2)
+    tolerance = *reinterpret_cast<double *>(args->args[1]);
+
+  std::string wkb;
+  if (tolerance <= 0.0) {
+    // Exact duplicate removal: use bg::unique
+    if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+      std::visit([](auto &g) { bg::unique(g); }, *cv);
+      wkb = write_geometry(r->srid, *cv);
+    } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+      std::visit([](auto &g) { bg::unique(g); }, *gv);
+      wkb = write_geometry(r->srid, *gv);
+    }
+  } else {
+    // Tolerance-based removal
+    double tol2 = tolerance * tolerance;
+    if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+      remove_repeated_variant(*cv, tol2);
+      wkb = write_geometry(r->srid, *cv);
+    } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+      remove_repeated_variant(*gv, tol2);
+      wkb = write_geometry(r->srid, *gv);
+    }
+  }
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_removerepeatedpoints_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_segmentize --------------------------------------------------------
+// Densifies geometry by adding points so no segment exceeds max_length.
+// stx_segmentize(geom, max_length)
+
+static bool stx_segmentize_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_segmentize() requires 2 arguments (geom, max_length)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_segmentize(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double max_len = *reinterpret_cast<double *>(args->args[1]);
+  if (max_len <= 0.0) { *error = 1; return nullptr; }
+
+  std::string wkb;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    wkb = densify_and_write(r->srid, *cv, max_len);
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    wkb = densify_and_write(r->srid, *gv, max_len);
+  }
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_segmentize_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_generatepoints ----------------------------------------------------
+// Generates random points inside a polygon.
+// stx_generatepoints(geom, npoints [, seed])
+
+static bool stx_generatepoints_init(UDF_INIT *initid, UDF_ARGS *args,
+                                     char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_generatepoints() requires 2 or 3 arguments "
+           "(geom, npoints [, seed])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = INT_RESULT;
+  if (args->arg_count == 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_generatepoints(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                                  unsigned long *length, char *is_null,
+                                  char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+  if (args->arg_count == 3 && !args->args[2]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  int npoints = static_cast<int>(*reinterpret_cast<long long *>(args->args[1]));
+  if (npoints <= 0) { *error = 1; return nullptr; }
+
+  // Seed: use arg[2] if provided, otherwise random_device
+  std::mt19937 rng;
+  if (args->arg_count == 3) {
+    auto seed =
+        static_cast<uint32_t>(*reinterpret_cast<long long *>(args->args[2]));
+    rng.seed(seed);
+  } else {
+    std::random_device rd;
+    rng.seed(rd());
+  }
+
+  std::string wkb;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    if (auto *poly = std::get_if<Polygon>(cv)) {
+      auto mp = generate_points_impl<Point, Polygon, MultiPoint>(*poly,
+                                                                  npoints, rng);
+      wkb = write_multi_point(r->srid, mp);
+    } else if (auto *mpoly = std::get_if<MultiPolygon>(cv)) {
+      // Distribute points by area ratio
+      MultiPoint all_pts;
+      double total_area = 0.0;
+      std::vector<double> areas;
+      for (const auto &p : *mpoly) {
+        double a = std::abs(bg::area(p));
+        areas.push_back(a);
+        total_area += a;
+      }
+      if (total_area <= 0.0) { *error = 1; return nullptr; }
+      int assigned = 0;
+      for (size_t i = 0; i < mpoly->size(); ++i) {
+        int n = (i == mpoly->size() - 1)
+                    ? (npoints - assigned)
+                    : static_cast<int>(std::round(npoints * areas[i] / total_area));
+        if (n > 0) {
+          auto mp = generate_points_impl<Point, Polygon, MultiPoint>(
+              (*mpoly)[i], n, rng);
+          all_pts.insert(all_pts.end(), mp.begin(), mp.end());
+          assigned += n;
+        }
+      }
+      wkb = write_multi_point(r->srid, all_pts);
+    } else {
+      *error = 1;
+      return nullptr;
+    }
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    if (auto *poly = std::get_if<GeoPolygon>(gv)) {
+      auto mp =
+          generate_points_impl<GeoPoint, GeoPolygon, GeoMultiPoint>(*poly,
+                                                                     npoints, rng);
+      wkb = write_multi_point(r->srid, mp);
+    } else if (auto *mpoly = std::get_if<GeoMultiPolygon>(gv)) {
+      GeoMultiPoint all_pts;
+      double total_area = 0.0;
+      std::vector<double> areas;
+      for (const auto &p : *mpoly) {
+        double a = std::abs(bg::area(p));
+        areas.push_back(a);
+        total_area += a;
+      }
+      if (total_area <= 0.0) { *error = 1; return nullptr; }
+      int assigned = 0;
+      for (size_t i = 0; i < mpoly->size(); ++i) {
+        int n = (i == mpoly->size() - 1)
+                    ? (npoints - assigned)
+                    : static_cast<int>(std::round(npoints * areas[i] / total_area));
+        if (n > 0) {
+          auto mp =
+              generate_points_impl<GeoPoint, GeoPolygon, GeoMultiPoint>(
+                  (*mpoly)[i], n, rng);
+          all_pts.insert(all_pts.end(), mp.begin(), mp.end());
+          assigned += n;
+        }
+      }
+      wkb = write_multi_point(r->srid, all_pts);
+    } else {
+      *error = 1;
+      return nullptr;
+    }
+  }
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_generatepoints_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+}  // extern "C" (pause for I/O format helpers)
+
+// ===== I/O Format Helpers (outside extern "C" for templates) =================
+
+// ----- Encoded Polyline helpers ----------------------------------------------
+// Google Encoded Polyline Algorithm:
+// https://developers.google.com/maps/documentation/utilities/polylinealgorithm
+
+static std::string encode_polyline_value(int value) {
+  value = (value < 0) ? ~(value << 1) : (value << 1);
+  std::string out;
+  while (value >= 0x20) {
+    out.push_back(static_cast<char>((value & 0x1F) | 0x20) + 63);
+    value >>= 5;
+  }
+  out.push_back(static_cast<char>(value) + 63);
+  return out;
+}
+
+template <typename LinestringT>
+static std::string encode_polyline(const LinestringT &ls, int precision) {
+  double factor = std::pow(10.0, precision);
+  std::string out;
+  int prev_lat = 0, prev_lng = 0;
+  for (const auto &pt : ls) {
+    // Encoded polyline uses (lat, lng) order
+    int lat = static_cast<int>(std::round(bg::get<1>(pt) * factor));
+    int lng = static_cast<int>(std::round(bg::get<0>(pt) * factor));
+    out += encode_polyline_value(lat - prev_lat);
+    out += encode_polyline_value(lng - prev_lng);
+    prev_lat = lat;
+    prev_lng = lng;
+  }
+  return out;
+}
+
+template <typename PointT, typename LinestringT>
+static LinestringT decode_polyline(const char *encoded, size_t len,
+                                   int precision) {
+  double factor = std::pow(10.0, precision);
+  LinestringT ls;
+  size_t i = 0;
+  int lat = 0, lng = 0;
+  while (i < len) {
+    // Decode latitude
+    int shift = 0, result = 0, b;
+    do {
+      if (i >= len) break;
+      b = static_cast<unsigned char>(encoded[i++]) - 63;
+      result |= (b & 0x1F) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    // Decode longitude
+    shift = 0;
+    result = 0;
+    do {
+      if (i >= len) break;
+      b = static_cast<unsigned char>(encoded[i++]) - 63;
+      result |= (b & 0x1F) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    PointT pt;
+    bg::set<0>(pt, lng / factor);  // x = longitude
+    bg::set<1>(pt, lat / factor);  // y = latitude
+    ls.push_back(pt);
+  }
+  return ls;
+}
+
+// ----- SVG output helpers ----------------------------------------------------
+
+static void svg_append_coord(std::string &buf, double x, double y, int prec) {
+  char bx[64], by[64];
+  snprintf(bx, sizeof(bx), "%.*g", prec, x);
+  snprintf(by, sizeof(by), "%.*g", prec, -y);
+  buf += bx;
+  buf += ' ';
+  buf += by;
+}
+
+template <typename PointT>
+static std::string svg_point(const PointT &pt, int prec) {
+  char bx[64], by[64];
+  snprintf(bx, sizeof(bx), "%.*g", prec, bg::get<0>(pt));
+  snprintf(by, sizeof(by), "%.*g", prec, -bg::get<1>(pt));
+  std::string s = "cx=\"";
+  s += bx;
+  s += "\" cy=\"";
+  s += by;
+  s += "\"";
+  return s;
+}
+
+template <typename LinestringT>
+static std::string svg_linestring(const LinestringT &ls, int rel, int prec) {
+  if (ls.empty()) return {};
+  std::string buf;
+  buf += "M ";
+  svg_append_coord(buf, bg::get<0>(ls[0]), bg::get<1>(ls[0]), prec);
+  if (rel == 0) {
+    for (size_t i = 1; i < ls.size(); ++i) {
+      buf += " L ";
+      svg_append_coord(buf, bg::get<0>(ls[i]), bg::get<1>(ls[i]), prec);
+    }
+  } else {
+    for (size_t i = 1; i < ls.size(); ++i) {
+      buf += " l ";
+      svg_append_coord(buf, bg::get<0>(ls[i]) - bg::get<0>(ls[i - 1]),
+                        bg::get<1>(ls[i]) - bg::get<1>(ls[i - 1]), prec);
+    }
+  }
+  return buf;
+}
+
+template <typename RingT>
+static void svg_ring(std::string &buf, const RingT &ring, int rel, int prec,
+                     bool first_ring) {
+  if (ring.empty()) return;
+  if (first_ring) {
+    buf += "M ";
+  } else {
+    buf += " M ";
+  }
+  svg_append_coord(buf, bg::get<0>(ring[0]), bg::get<1>(ring[0]), prec);
+  if (rel == 0) {
+    for (size_t i = 1; i < ring.size(); ++i) {
+      buf += " L ";
+      svg_append_coord(buf, bg::get<0>(ring[i]), bg::get<1>(ring[i]), prec);
+    }
+  } else {
+    for (size_t i = 1; i < ring.size(); ++i) {
+      buf += " l ";
+      svg_append_coord(buf, bg::get<0>(ring[i]) - bg::get<0>(ring[i - 1]),
+                        bg::get<1>(ring[i]) - bg::get<1>(ring[i - 1]), prec);
+    }
+  }
+  buf += " Z";
+}
+
+template <typename PolygonT>
+static std::string svg_polygon(const PolygonT &poly, int rel, int prec) {
+  std::string buf;
+  svg_ring(buf, poly.outer(), rel, prec, true);
+  for (const auto &inner : poly.inners())
+    svg_ring(buf, inner, rel, prec, false);
+  return buf;
+}
+
+template <typename Variant>
+static std::string format_svg(const Variant &v, int rel, int prec) {
+  return std::visit(
+      [rel, prec](const auto &g) -> std::string {
+        using T = std::decay_t<decltype(g)>;
+        if constexpr (std::is_same_v<T, Point> || std::is_same_v<T, GeoPoint>)
+          return svg_point(g, prec);
+        else if constexpr (std::is_same_v<T, Linestring> ||
+                            std::is_same_v<T, GeoLinestring>)
+          return svg_linestring(g, rel, prec);
+        else if constexpr (std::is_same_v<T, Polygon> ||
+                            std::is_same_v<T, GeoPolygon>)
+          return svg_polygon(g, rel, prec);
+        else if constexpr (std::is_same_v<T, MultiPoint> ||
+                            std::is_same_v<T, GeoMultiPoint>) {
+          std::string buf;
+          for (const auto &pt : g) {
+            if (!buf.empty()) buf += ',';
+            buf += svg_point(pt, prec);
+          }
+          return buf;
+        } else if constexpr (std::is_same_v<T, MultiLinestring> ||
+                              std::is_same_v<T, GeoMultiLinestring>) {
+          std::string buf;
+          for (const auto &ls : g) {
+            if (!buf.empty()) buf += ' ';
+            buf += svg_linestring(ls, rel, prec);
+          }
+          return buf;
+        } else if constexpr (std::is_same_v<T, MultiPolygon> ||
+                              std::is_same_v<T, GeoMultiPolygon>) {
+          std::string buf;
+          for (const auto &p : g) {
+            if (!buf.empty()) buf += ' ';
+            buf += svg_polygon(p, rel, prec);
+          }
+          return buf;
+        } else
+          return {};
+      },
+      v);
+}
+
+// ----- KML output helpers ----------------------------------------------------
+
+static void kml_append_coords(std::string &buf, double x, double y, int prec) {
+  char bx[64], by[64];
+  snprintf(bx, sizeof(bx), "%.*g", prec, x);
+  snprintf(by, sizeof(by), "%.*g", prec, y);
+  buf += bx;
+  buf += ',';
+  buf += by;
+}
+
+template <typename Variant>
+static std::string format_kml(const Variant &v, int prec) {
+  return std::visit(
+      [prec](const auto &g) -> std::string {
+        using T = std::decay_t<decltype(g)>;
+        if constexpr (std::is_same_v<T, Point> || std::is_same_v<T, GeoPoint>) {
+          std::string buf = "<Point><coordinates>";
+          kml_append_coords(buf, bg::get<0>(g), bg::get<1>(g), prec);
+          buf += "</coordinates></Point>";
+          return buf;
+        } else if constexpr (std::is_same_v<T, Linestring> ||
+                              std::is_same_v<T, GeoLinestring>) {
+          std::string buf = "<LineString><coordinates>";
+          for (size_t i = 0; i < g.size(); ++i) {
+            if (i > 0) buf += ' ';
+            kml_append_coords(buf, bg::get<0>(g[i]), bg::get<1>(g[i]), prec);
+          }
+          buf += "</coordinates></LineString>";
+          return buf;
+        } else if constexpr (std::is_same_v<T, Polygon> ||
+                              std::is_same_v<T, GeoPolygon>) {
+          std::string buf = "<Polygon>";
+          buf += "<outerBoundaryIs><LinearRing><coordinates>";
+          for (size_t i = 0; i < g.outer().size(); ++i) {
+            if (i > 0) buf += ' ';
+            kml_append_coords(buf, bg::get<0>(g.outer()[i]),
+                              bg::get<1>(g.outer()[i]), prec);
+          }
+          buf += "</coordinates></LinearRing></outerBoundaryIs>";
+          for (const auto &inner : g.inners()) {
+            buf += "<innerBoundaryIs><LinearRing><coordinates>";
+            for (size_t i = 0; i < inner.size(); ++i) {
+              if (i > 0) buf += ' ';
+              kml_append_coords(buf, bg::get<0>(inner[i]),
+                                bg::get<1>(inner[i]), prec);
+            }
+            buf += "</coordinates></LinearRing></innerBoundaryIs>";
+          }
+          buf += "</Polygon>";
+          return buf;
+        } else if constexpr (std::is_same_v<T, MultiPoint> ||
+                              std::is_same_v<T, GeoMultiPoint>) {
+          std::string buf = "<MultiGeometry>";
+          for (const auto &pt : g) {
+            buf += "<Point><coordinates>";
+            kml_append_coords(buf, bg::get<0>(pt), bg::get<1>(pt), prec);
+            buf += "</coordinates></Point>";
+          }
+          buf += "</MultiGeometry>";
+          return buf;
+        } else if constexpr (std::is_same_v<T, MultiLinestring> ||
+                              std::is_same_v<T, GeoMultiLinestring>) {
+          std::string buf = "<MultiGeometry>";
+          for (const auto &ls : g) {
+            buf += "<LineString><coordinates>";
+            for (size_t i = 0; i < ls.size(); ++i) {
+              if (i > 0) buf += ' ';
+              kml_append_coords(buf, bg::get<0>(ls[i]), bg::get<1>(ls[i]),
+                                prec);
+            }
+            buf += "</coordinates></LineString>";
+          }
+          buf += "</MultiGeometry>";
+          return buf;
+        } else if constexpr (std::is_same_v<T, MultiPolygon> ||
+                              std::is_same_v<T, GeoMultiPolygon>) {
+          std::string buf = "<MultiGeometry>";
+          for (const auto &poly : g) {
+            buf += "<Polygon><outerBoundaryIs><LinearRing><coordinates>";
+            for (size_t i = 0; i < poly.outer().size(); ++i) {
+              if (i > 0) buf += ' ';
+              kml_append_coords(buf, bg::get<0>(poly.outer()[i]),
+                                bg::get<1>(poly.outer()[i]), prec);
+            }
+            buf += "</coordinates></LinearRing></outerBoundaryIs>";
+            for (const auto &inner : poly.inners()) {
+              buf += "<innerBoundaryIs><LinearRing><coordinates>";
+              for (size_t i = 0; i < inner.size(); ++i) {
+                if (i > 0) buf += ' ';
+                kml_append_coords(buf, bg::get<0>(inner[i]),
+                                  bg::get<1>(inner[i]), prec);
+              }
+              buf += "</coordinates></LinearRing></innerBoundaryIs>";
+            }
+            buf += "</Polygon>";
+          }
+          buf += "</MultiGeometry>";
+          return buf;
+        } else
+          return {};
+      },
+      v);
+}
+
+// ----- EWKT helpers ----------------------------------------------------------
+
+template <typename Variant>
+static std::string format_ewkt(uint32_t srid, const Variant &v) {
+  std::string result = "SRID=" + std::to_string(srid) + ";";
+  std::ostringstream oss;
+  oss << std::setprecision(15);
+  std::visit([&oss](const auto &g) { oss << bg::wkt(g); }, v);
+  result += oss.str();
+  return result;
+}
+
+// Simple WKT parser for EWKT input.
+// Supports POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING, MULTIPOLYGON.
+static std::optional<ParseResult> parse_ewkt(const char *text, size_t len) {
+  std::string s(text, len);
+  uint32_t srid = 0;
+  size_t wkt_start = 0;
+
+  // Parse optional SRID= prefix
+  if (s.size() > 5 && (s[0] == 'S' || s[0] == 's') &&
+      (s[1] == 'R' || s[1] == 'r') && (s[2] == 'I' || s[2] == 'i') &&
+      (s[3] == 'D' || s[3] == 'd') && s[4] == '=') {
+    size_t semi = s.find(';', 5);
+    if (semi == std::string::npos) return std::nullopt;
+    srid = static_cast<uint32_t>(std::stoul(s.substr(5, semi - 5)));
+    wkt_start = semi + 1;
+  }
+
+  std::string wkt = s.substr(wkt_start);
+  // Trim leading whitespace
+  size_t first_non_space = wkt.find_first_not_of(" \t\r\n");
+  if (first_non_space == std::string::npos) return std::nullopt;
+  wkt = wkt.substr(first_non_space);
+
+  // Detect geometry type
+  std::string upper;
+  for (char c : wkt) upper += static_cast<char>(toupper(c));
+
+  bool geo = is_geographic_srid(srid);
+  ParseResult result;
+  result.srid = srid;
+
+  try {
+    if (upper.find("MULTIPOLYGON") == 0) {
+      if (geo) {
+        GeoMultiPolygon g;
+        bg::read_wkt(wkt, g);
+        result.geometry = GeographicVariant(std::move(g));
+      } else {
+        MultiPolygon g;
+        bg::read_wkt(wkt, g);
+        result.geometry = CartesianVariant(std::move(g));
+      }
+    } else if (upper.find("MULTILINESTRING") == 0) {
+      if (geo) {
+        GeoMultiLinestring g;
+        bg::read_wkt(wkt, g);
+        result.geometry = GeographicVariant(std::move(g));
+      } else {
+        MultiLinestring g;
+        bg::read_wkt(wkt, g);
+        result.geometry = CartesianVariant(std::move(g));
+      }
+    } else if (upper.find("MULTIPOINT") == 0) {
+      if (geo) {
+        GeoMultiPoint g;
+        bg::read_wkt(wkt, g);
+        result.geometry = GeographicVariant(std::move(g));
+      } else {
+        MultiPoint g;
+        bg::read_wkt(wkt, g);
+        result.geometry = CartesianVariant(std::move(g));
+      }
+    } else if (upper.find("POLYGON") == 0) {
+      if (geo) {
+        GeoPolygon g;
+        bg::read_wkt(wkt, g);
+        result.geometry = GeographicVariant(std::move(g));
+      } else {
+        Polygon g;
+        bg::read_wkt(wkt, g);
+        result.geometry = CartesianVariant(std::move(g));
+      }
+    } else if (upper.find("LINESTRING") == 0) {
+      if (geo) {
+        GeoLinestring g;
+        bg::read_wkt(wkt, g);
+        result.geometry = GeographicVariant(std::move(g));
+      } else {
+        Linestring g;
+        bg::read_wkt(wkt, g);
+        result.geometry = CartesianVariant(std::move(g));
+      }
+    } else if (upper.find("POINT") == 0) {
+      if (geo) {
+        GeoPoint g;
+        bg::read_wkt(wkt, g);
+        result.geometry = GeographicVariant(std::move(g));
+      } else {
+        Point g;
+        bg::read_wkt(wkt, g);
+        result.geometry = CartesianVariant(std::move(g));
+      }
+    } else {
+      return std::nullopt;
+    }
+  } catch (...) {
+    return std::nullopt;
+  }
+
+  return result;
+}
+
+// Helper: return a string result from a UDF (handles buffer vs malloc).
+static char *return_string(UDF_INIT *initid, const std::string &str,
+                           char *result, unsigned long *length) {
+  *length = static_cast<unsigned long>(str.size());
+  if (str.size() <= 255) {
+    std::memcpy(result, str.data(), str.size());
+    return result;
+  }
+  initid->ptr = static_cast<char *>(malloc(str.size()));
+  std::memcpy(initid->ptr, str.data(), str.size());
+  return initid->ptr;
+}
+
+extern "C" {  // resume extern "C" for I/O format UDFs
+
+// ----- stx_asencodedpolyline ------------------------------------------------
+// Encodes a LineString as a Google Encoded Polyline string.
+// stx_asencodedpolyline(geom [, precision])
+
+static bool stx_asencodedpolyline_init(UDF_INIT *initid, UDF_ARGS *args,
+                                        char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 2) {
+    strcpy(msg,
+           "stx_asencodedpolyline() requires 1 or 2 arguments "
+           "(geom [, precision])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count == 2) args->arg_type[1] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_asencodedpolyline(UDF_INIT *initid, UDF_ARGS *args,
+                                    char *result, unsigned long *length,
+                                    char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  if (args->arg_count == 2 && !args->args[1]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  int precision = 5;
+  if (args->arg_count == 2)
+    precision = static_cast<int>(*reinterpret_cast<long long *>(args->args[1]));
+
+  std::string encoded;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    if (auto *ls = std::get_if<Linestring>(cv))
+      encoded = encode_polyline(*ls, precision);
+    else { *error = 1; return nullptr; }
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    if (auto *ls = std::get_if<GeoLinestring>(gv))
+      encoded = encode_polyline(*ls, precision);
+    else { *error = 1; return nullptr; }
+  }
+
+  if (encoded.empty()) { *error = 1; return nullptr; }
+  return return_string(initid, encoded, result, length);
+}
+
+static void stx_asencodedpolyline_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_linefromenccodedpolyline ------------------------------------------
+// Decodes a Google Encoded Polyline string to a LineString.
+// stx_linefromenccodedpolyline(text [, srid [, precision]])
+
+static bool stx_linefromenccodedpolyline_init(UDF_INIT *initid, UDF_ARGS *args,
+                                               char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_linefromenccodedpolyline() requires 1-3 arguments "
+           "(text [, srid [, precision]])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count >= 2) args->arg_type[1] = INT_RESULT;
+  if (args->arg_count == 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_linefromenccodedpolyline(UDF_INIT *initid, UDF_ARGS *args,
+                                           char *result, unsigned long *length,
+                                           char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = 4326;
+  if (args->arg_count >= 2 && args->args[1])
+    srid = static_cast<uint32_t>(*reinterpret_cast<long long *>(args->args[1]));
+
+  int precision = 5;
+  if (args->arg_count == 3 && args->args[2])
+    precision =
+        static_cast<int>(*reinterpret_cast<long long *>(args->args[2]));
+
+  std::string wkb;
+  if (is_geographic_srid(srid)) {
+    auto ls = decode_polyline<GeoPoint, GeoLinestring>(args->args[0],
+                                                        args->lengths[0],
+                                                        precision);
+    wkb = write_linestring(srid, ls);
+  } else {
+    auto ls = decode_polyline<Point, Linestring>(args->args[0],
+                                                  args->lengths[0], precision);
+    wkb = write_linestring(srid, ls);
+  }
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_linefromenccodedpolyline_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_assvg -------------------------------------------------------------
+// Returns SVG path data for a geometry.
+// stx_assvg(geom [, rel [, precision]])
+
+static bool stx_assvg_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_assvg() requires 1-3 arguments (geom [, rel [, precision]])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count >= 2) args->arg_type[1] = INT_RESULT;
+  if (args->arg_count == 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_assvg(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                        unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  int rel = 0;
+  if (args->arg_count >= 2 && args->args[1])
+    rel = static_cast<int>(*reinterpret_cast<long long *>(args->args[1]));
+  int prec = 15;
+  if (args->arg_count == 3 && args->args[2])
+    prec = static_cast<int>(*reinterpret_cast<long long *>(args->args[2]));
+
+  std::string svg;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry))
+    svg = format_svg(*cv, rel, prec);
+  else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry))
+    svg = format_svg(*gv, rel, prec);
+
+  if (svg.empty()) { *error = 1; return nullptr; }
+  return return_string(initid, svg, result, length);
+}
+
+static void stx_assvg_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_askml -------------------------------------------------------------
+// Returns KML geometry element for a geometry.
+// stx_askml(geom [, precision])
+
+static bool stx_askml_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 2) {
+    strcpy(msg,
+           "stx_askml() requires 1 or 2 arguments (geom [, precision])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count == 2) args->arg_type[1] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_askml(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                        unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  int prec = 15;
+  if (args->arg_count == 2 && args->args[1])
+    prec = static_cast<int>(*reinterpret_cast<long long *>(args->args[1]));
+
+  std::string kml;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry))
+    kml = format_kml(*cv, prec);
+  else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry))
+    kml = format_kml(*gv, prec);
+
+  if (kml.empty()) { *error = 1; return nullptr; }
+  return return_string(initid, kml, result, length);
+}
+
+static void stx_askml_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_asewkt ------------------------------------------------------------
+// Returns EWKT (Extended WKT) string: "SRID=xxxx;POINT(x y)" etc.
+// stx_asewkt(geom)
+
+static bool stx_asewkt_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_asewkt() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_asewkt(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                          unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  std::string ewkt;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry))
+    ewkt = format_ewkt(r->srid, *cv);
+  else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry))
+    ewkt = format_ewkt(r->srid, *gv);
+
+  if (ewkt.empty()) { *error = 1; return nullptr; }
+  return return_string(initid, ewkt, result, length);
+}
+
+static void stx_asewkt_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_geomfromewkt ------------------------------------------------------
+// Parses EWKT string and returns geometry binary.
+// stx_geomfromewkt(text)
+
+static bool stx_geomfromewkt_init(UDF_INIT *initid, UDF_ARGS *args,
+                                   char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_geomfromewkt() requires 1 argument (text)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_geomfromewkt(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                                unsigned long *length, char *is_null,
+                                char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_ewkt(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  std::string wkb;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry))
+    wkb = write_geometry(r->srid, *cv);
+  else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry))
+    wkb = write_geometry(r->srid, *gv);
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_geomfromewkt_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -1538,6 +2714,33 @@ static const udf_entry udf_table[] = {
      stx_relate_deinit},
     {"stx_relatematch", INT_RESULT, (Udf_func_any)stx_relatematch,
      stx_relatematch_init, stx_relatematch_deinit},
+    {"stx_makepoint", STRING_RESULT, (Udf_func_any)stx_makepoint,
+     stx_makepoint_init, stx_makepoint_deinit},
+    {"stx_affine", STRING_RESULT, (Udf_func_any)stx_affine, stx_affine_init,
+     stx_affine_deinit},
+    {"stx_snaptogrid", STRING_RESULT, (Udf_func_any)stx_snaptogrid,
+     stx_snaptogrid_init, stx_snaptogrid_deinit},
+    {"stx_removerepeatedpoints", STRING_RESULT,
+     (Udf_func_any)stx_removerepeatedpoints,
+     stx_removerepeatedpoints_init, stx_removerepeatedpoints_deinit},
+    {"stx_segmentize", STRING_RESULT, (Udf_func_any)stx_segmentize,
+     stx_segmentize_init, stx_segmentize_deinit},
+    {"stx_generatepoints", STRING_RESULT, (Udf_func_any)stx_generatepoints,
+     stx_generatepoints_init, stx_generatepoints_deinit},
+    {"stx_asencodedpolyline", STRING_RESULT,
+     (Udf_func_any)stx_asencodedpolyline, stx_asencodedpolyline_init,
+     stx_asencodedpolyline_deinit},
+    {"stx_linefromenccodedpolyline", STRING_RESULT,
+     (Udf_func_any)stx_linefromenccodedpolyline,
+     stx_linefromenccodedpolyline_init, stx_linefromenccodedpolyline_deinit},
+    {"stx_assvg", STRING_RESULT, (Udf_func_any)stx_assvg, stx_assvg_init,
+     stx_assvg_deinit},
+    {"stx_askml", STRING_RESULT, (Udf_func_any)stx_askml, stx_askml_init,
+     stx_askml_deinit},
+    {"stx_asewkt", STRING_RESULT, (Udf_func_any)stx_asewkt, stx_asewkt_init,
+     stx_asewkt_deinit},
+    {"stx_geomfromewkt", STRING_RESULT, (Udf_func_any)stx_geomfromewkt,
+     stx_geomfromewkt_init, stx_geomfromewkt_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

@@ -55,6 +55,18 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [stx_closestpoint](#stx_closestpoint) | GEOMETRY | 最近接点 / Closest point on geometry |
 | [stx_relate](#stx_relate) | STRING | DE-9IM 行列 / DE-9IM matrix string |
 | [stx_relatematch](#stx_relatematch) | INTEGER | DE-9IM パターン判定 / DE-9IM pattern match |
+| [stx_makepoint](#stx_makepoint) | GEOMETRY | 座標から POINT 構築 / Create Point from coordinates |
+| [stx_affine](#stx_affine) | GEOMETRY | アフィン変換 / General 2D affine transformation |
+| [stx_snaptogrid](#stx_snaptogrid) | GEOMETRY | 座標丸め / Snap coordinates to grid |
+| [stx_removerepeatedpoints](#stx_removerepeatedpoints) | GEOMETRY | 重複頂点除去 / Remove consecutive duplicates |
+| [stx_segmentize](#stx_segmentize) | GEOMETRY | 線分分割 / Split segments to max length |
+| [stx_generatepoints](#stx_generatepoints) | GEOMETRY | ランダム点生成 / Random points in polygon |
+| [stx_asencodedpolyline](#stx_asencodedpolyline) | STRING | Encoded Polyline 出力 / Geometry to Encoded Polyline |
+| [stx_linefromenccodedpolyline](#stx_linefromenccodedpolyline) | GEOMETRY | Encoded Polyline 入力 / Encoded Polyline to LineString |
+| [stx_assvg](#stx_assvg) | STRING | SVG 出力 / Geometry to SVG path data |
+| [stx_askml](#stx_askml) | STRING | KML 出力 / Geometry to KML |
+| [stx_asewkt](#stx_asewkt) | STRING | EWKT 出力 / Geometry to EWKT |
+| [stx_geomfromewkt](#stx_geomfromewkt) | GEOMETRY | EWKT 入力 / EWKT to Geometry |
 
 ---
 
@@ -952,14 +964,582 @@ SELECT stx_relatematch(
 
 ---
 
+### stx_makepoint
+
+座標値から POINT ジオメトリを構築する。
+Creates a Point geometry from X and Y coordinate values.
+
+```sql
+stx_makepoint(x, y [, srid]) -> GEOMETRY (Point)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| x | DOUBLE | X 座標（経度） / X coordinate (longitude) |
+| y | DOUBLE | Y 座標（緯度） / Y coordinate (latitude) |
+| srid | INTEGER | (任意) SRID。省略時は 0 / (Optional) SRID. Defaults to 0 |
+
+#### 戻り値 (Return Value)
+
+指定した座標の Point ジオメトリ。WKB 形式で直接構築するため高速。
+A Point geometry at the specified coordinates. Constructed directly as WKB for efficiency.
+
+#### 使用例 (Examples)
+
+```sql
+-- 基本的な使用法 / Basic usage
+SELECT ST_AsText(stx_makepoint(139.7, 35.6));
+-- POINT(139.7 35.6)
+
+-- SRID 指定 / With SRID
+SELECT ST_AsText(stx_makepoint(139.7, 35.6, 4326));
+-- POINT(35.6 139.7)  (4326 uses lat,lon display order)
+
+SELECT ST_SRID(stx_makepoint(139.7, 35.6, 4326));
+-- 4326
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_MakePoint()`
+- MySQL 標準: なし
+
+---
+
+### stx_affine
+
+ジオメトリに一般的な 2D アフィン変換を適用する。
+Applies a general 2D affine transformation to a geometry.
+
+```sql
+stx_affine(geometry, a, b, d, e, xoff, yoff) -> GEOMETRY
+```
+
+変換式 / Transformation: `x' = a*x + b*y + xoff`, `y' = d*x + e*y + yoff`
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| a | DOUBLE | x→x' 係数 / x-to-x' coefficient |
+| b | DOUBLE | y→x' 係数 / y-to-x' coefficient |
+| d | DOUBLE | x→y' 係数 / x-to-y' coefficient |
+| e | DOUBLE | y→y' 係数 / y-to-y' coefficient |
+| xoff | DOUBLE | X オフセット / X offset |
+| yoff | DOUBLE | Y オフセット / Y offset |
+
+#### 特殊ケース (Special Cases)
+
+| 変換 (Transform) | パラメータ (Parameters) |
+|---|---|
+| 平行移動 (Translate) | `stx_affine(geom, 1, 0, 0, 1, dx, dy)` |
+| スケール (Scale) | `stx_affine(geom, sx, 0, 0, sy, 0, 0)` |
+| 回転 (Rotate) | `stx_affine(geom, cos(a), -sin(a), sin(a), cos(a), 0, 0)` |
+| 反転 (Reflect Y) | `stx_affine(geom, 1, 0, 0, -1, 0, 0)` |
+
+#### 使用例 (Examples)
+
+```sql
+-- せん断変換 / Shear transform
+SELECT ST_AsText(stx_affine(
+  ST_GeomFromText('POINT(1 0)'), 1, 2, 0, 1, 0, 0));
+-- POINT(1 1)
+
+-- 恒等変換 / Identity transform
+SELECT ST_AsText(stx_affine(
+  ST_GeomFromText('POINT(3 4)'), 1, 0, 0, 1, 0, 0));
+-- POINT(3 4)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Affine()`
+
+---
+
+### stx_snaptogrid
+
+ジオメトリの全座標を指定したグリッドサイズに丸める。
+Snaps all coordinates of a geometry to a grid of the specified size.
+
+```sql
+stx_snaptogrid(geometry, size) -> GEOMETRY
+stx_snaptogrid(geometry, size_x, size_y) -> GEOMETRY
+```
+
+変換式 / Transformation: `x' = round(x / size) * size`
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| size | DOUBLE | グリッドサイズ（x, y 共通） / Grid cell size (both axes) |
+| size_x | DOUBLE | X 方向グリッドサイズ / Grid cell size for X axis |
+| size_y | DOUBLE | Y 方向グリッドサイズ / Grid cell size for Y axis |
+
+#### 備考 (Notes)
+
+- `size = 0` の場合、その軸の座標は変更しない / `size = 0` leaves coordinates unchanged for that axis
+
+#### 使用例 (Examples)
+
+```sql
+-- 0.5 単位にスナップ / Snap to 0.5 grid
+SELECT ST_AsText(stx_snaptogrid(
+  ST_GeomFromText('POINT(1.3 2.7)'), 0.5));
+-- POINT(1.5 2.5)
+
+-- X と Y で異なるサイズ / Different X and Y sizes
+SELECT ST_AsText(stx_snaptogrid(
+  ST_GeomFromText('POINT(1.3 2.7)'), 1, 0.5));
+-- POINT(1 2.5)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_SnapToGrid()`
+
+---
+
+### stx_removerepeatedpoints
+
+ジオメトリから連続する重複頂点を除去する。
+Removes consecutive duplicate vertices from a geometry.
+
+```sql
+stx_removerepeatedpoints(geometry) -> GEOMETRY
+stx_removerepeatedpoints(geometry, tolerance) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| tolerance | DOUBLE | (任意) 距離がこの値以下の連続頂点を除去 / (Optional) Remove consecutive vertices within this distance |
+
+#### 備考 (Notes)
+
+- 1引数版: 完全一致の連続重複のみ除去 / 1-argument form: removes exact consecutive duplicates only
+- 2引数版: tolerance 以内の連続頂点を除去 / 2-argument form: removes consecutive vertices within tolerance
+- LineString は最低2点、Polygon のリングは最低4点を保持 / LineString keeps minimum 2 points, Polygon rings keep minimum 4 points
+
+#### 使用例 (Examples)
+
+```sql
+-- 完全一致の重複除去 / Remove exact duplicates
+SELECT ST_AsText(stx_removerepeatedpoints(
+  ST_GeomFromText('LINESTRING(0 0, 0 0, 1 1, 1 1, 2 2)')));
+-- LINESTRING(0 0,1 1,2 2)
+
+-- tolerance 指定 / With tolerance
+SELECT ST_AsText(stx_removerepeatedpoints(
+  ST_GeomFromText('LINESTRING(0 0, 0.1 0, 1 0, 1.05 0, 2 0)'), 0.2));
+-- LINESTRING(0 0,1 0,2 0)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_RemoveRepeatedPoints()`
+
+---
+
+### stx_segmentize
+
+ジオメトリのすべての辺を、指定した最大長以下になるよう分割（頂点を挿入）する。
+Splits all segments of a geometry by inserting vertices so that no segment exceeds the specified maximum length.
+
+```sql
+stx_segmentize(geometry, max_length) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| max_length | DOUBLE | セグメントの最大長 / Maximum segment length (Cartesian: coordinate units, Geographic: meters) |
+
+#### 備考 (Notes)
+
+- 既に max_length 以下のセグメントは変更しない / Segments already shorter than max_length are unchanged
+- 分割は均等に行われる（max_length ちょうどではなく、元の辺を等分割） / Segments are split evenly (not at exact max_length boundaries)
+- Point / MultiPoint は辺を持たないためそのまま返す / Point/MultiPoint have no segments and are returned as-is
+- Geographic 座標系では測地線上の内挿を行う / Geographic coordinates interpolate along geodesics
+
+#### 使用例 (Examples)
+
+```sql
+-- 10 単位のラインを最大 3 で分割 / Split 10-unit line at max 3
+SELECT ST_AsText(stx_segmentize(
+  ST_GeomFromText('LINESTRING(0 0, 10 0)'), 3));
+-- LINESTRING(0 0,2.5 0,5 0,7.5 0,10 0)
+
+-- ポリゴンの辺を分割 / Densify polygon edges
+SELECT ST_AsText(stx_segmentize(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 6));
+-- POLYGON((0 0,0 5,0 10,5 10,10 10,10 5,10 0,5 0,0 0))
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Segmentize()`
+
+---
+
+### stx_generatepoints
+
+ポリゴンまたはマルチポリゴンの内部にランダムな点を生成し、MultiPoint として返す。
+Generates random points inside a Polygon or MultiPolygon and returns them as a MultiPoint.
+
+```sql
+stx_generatepoints(geometry, npoints [, seed]) -> GEOMETRY (MultiPoint)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | Polygon または MultiPolygon / Polygon or MultiPolygon |
+| npoints | INTEGER | 生成する点の数 / Number of points to generate |
+| seed | INTEGER | (任意) 乱数シード（再現性用） / (Optional) Random seed for reproducibility |
+
+#### 戻り値 (Return Value)
+
+指定した数の点を含む MultiPoint ジオメトリ（入力と同じ SRID）。
+A MultiPoint geometry with the specified number of points (same SRID as input).
+
+#### アルゴリズム (Algorithm)
+
+バウンディングボックス内でランダムな点を生成し、ポリゴン内部にある点のみを採用する棄却法を使用。MultiPolygon の場合は面積比で各ポリゴンに点数を配分。
+Uses rejection sampling within the bounding box. For MultiPolygon, distributes points proportional to polygon areas.
+
+#### 使用例 (Examples)
+
+```sql
+-- 5点を生成 / Generate 5 points
+SELECT ST_AsText(stx_generatepoints(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 5, 42));
+
+-- シード指定で再現性を確保 / Reproducible with same seed
+SELECT ST_AsText(stx_generatepoints(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 3, 123))
+=
+SELECT ST_AsText(stx_generatepoints(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 3, 123));
+-- Always identical
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_GeneratePoints()`
+
+---
+
+### stx_asencodedpolyline
+
+LineString ジオメトリを Google Encoded Polyline Algorithm Format の文字列に変換する。
+Converts a LineString geometry to a Google Encoded Polyline Algorithm Format string.
+
+```sql
+stx_asencodedpolyline(geometry [, precision]) -> STRING
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | LineString ジオメトリ / LineString geometry |
+| precision | INTEGER | (任意) 精度（10^precision で丸め）。デフォルト 5 / (Optional) Precision (coordinates multiplied by 10^precision). Default: 5 |
+
+#### 備考 (Notes)
+
+- Encoded Polyline 形式は (latitude, longitude) 順でエンコードする / Encoded Polyline format encodes in (latitude, longitude) order
+- Google Maps API との連携に使用 / Used for integration with Google Maps API
+- WKB の座標 (x=lon, y=lat) を自動的に (lat, lon) 順に変換してエンコード / Automatically converts WKB (x=lon, y=lat) to (lat, lon) order for encoding
+
+#### 使用例 (Examples)
+
+```sql
+-- Google の公式例 / Google's official example
+SELECT stx_asencodedpolyline(
+  ST_GeomFromText('LINESTRING(-120.2 38.5, -120.95 40.7, -126.453 43.252)'));
+-- _p~iF~ps|U_ulLnnqC_mqNvxq`@
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_AsEncodedPolyline()`
+
+---
+
+### stx_linefromenccodedpolyline
+
+Google Encoded Polyline Algorithm Format の文字列から LineString ジオメトリを構築する。
+Creates a LineString geometry from a Google Encoded Polyline Algorithm Format string.
+
+```sql
+stx_linefromenccodedpolyline(text [, srid [, precision]]) -> GEOMETRY (LineString)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| text | STRING | Encoded Polyline 文字列 / Encoded Polyline string |
+| srid | INTEGER | (任意) 出力の SRID。デフォルト 4326 / (Optional) Output SRID. Default: 4326 |
+| precision | INTEGER | (任意) 精度（10^precision で復元）。デフォルト 5 / (Optional) Precision. Default: 5 |
+
+#### 備考 (Notes)
+
+- デフォルト SRID は 4326（Encoded Polyline は通常 WGS84 座標に使用されるため）/ Default SRID is 4326 (Encoded Polyline is typically used with WGS84 coordinates)
+- デコード後の座標は WKB に (x=lon, y=lat) として格納 / Decoded coordinates are stored as (x=lon, y=lat) in WKB
+
+#### 使用例 (Examples)
+
+```sql
+-- デコード / Decode
+SELECT ST_AsText(stx_linefromenccodedpolyline(
+  '_p~iF~ps|U_ulLnnqC_mqNvxq`@', 0));
+-- LINESTRING(-120.2 38.5,-120.95 40.7,-126.453 43.252)
+
+-- ラウンドトリップ / Round-trip
+SELECT ST_AsText(stx_linefromenccodedpolyline(
+  stx_asencodedpolyline(
+    ST_GeomFromText('LINESTRING(-120.2 38.5, -120.95 40.7, -126.453 43.252)')),
+  0));
+-- LINESTRING(-120.2 38.5,-120.95 40.7,-126.453 43.252)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_LineFromEncodedPolyline()`
+
+---
+
+### stx_assvg
+
+ジオメトリを SVG (Scalable Vector Graphics) パスデータ文字列に変換する。
+Converts a geometry to an SVG path data string.
+
+```sql
+stx_assvg(geometry [, rel [, precision]]) -> STRING
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| rel | INTEGER | (任意) 0=絶対座標, 1=相対座標。デフォルト 0 / (Optional) 0=absolute, 1=relative coordinates. Default: 0 |
+| precision | INTEGER | (任意) 有効桁数。デフォルト 15 / (Optional) Significant digits. Default: 15 |
+
+#### 出力形式 (Output Format)
+
+| ジオメトリ型 (Type) | 出力形式 (Format) |
+|---|---|
+| Point | `cx="x" cy="y"` (SVG circle 属性 / SVG circle attributes) |
+| LineString | `M x y L x y L x y` (絶対) / `M x y l dx dy l dx dy` (相対) |
+| Polygon | `M x y L x y ... Z` (閉パス / closed path) |
+| Multi* | 各要素を連結 / Concatenation of elements |
+
+#### 備考 (Notes)
+
+- SVG の Y 軸は下向きのため、Y 座標は符号反転される / Y coordinates are negated because SVG Y-axis points downward
+
+#### 使用例 (Examples)
+
+```sql
+-- 点 / Point
+SELECT stx_assvg(ST_GeomFromText('POINT(1 2)'));
+-- cx="1" cy="-2"
+
+-- ライン（絶対座標）/ LineString (absolute)
+SELECT stx_assvg(ST_GeomFromText('LINESTRING(0 0, 10 10, 20 0)'));
+-- M 0 -0 L 10 -10 L 20 -0
+
+-- ライン（相対座標）/ LineString (relative)
+SELECT stx_assvg(ST_GeomFromText('LINESTRING(10 20, 30 40, 50 20)'), 1);
+-- M 10 -20 l 20 -20 l 20 20
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_AsSVG()`
+- MySQL 標準: なし
+
+---
+
+### stx_askml
+
+ジオメトリを KML (Keyhole Markup Language) 形式の XML 文字列に変換する。
+Converts a geometry to a KML XML string.
+
+```sql
+stx_askml(geometry [, precision]) -> STRING
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| precision | INTEGER | (任意) 有効桁数。デフォルト 15 / (Optional) Significant digits. Default: 15 |
+
+#### 出力形式 (Output Format)
+
+| ジオメトリ型 (Type) | 出力形式 (Format) |
+|---|---|
+| Point | `<Point><coordinates>lon,lat</coordinates></Point>` |
+| LineString | `<LineString><coordinates>lon,lat lon,lat ...</coordinates></LineString>` |
+| Polygon | `<Polygon><outerBoundaryIs><LinearRing><coordinates>...</coordinates></LinearRing></outerBoundaryIs></Polygon>` |
+| Multi* | `<MultiGeometry>...</MultiGeometry>` |
+
+#### 備考 (Notes)
+
+- KML の座標は (longitude, latitude) 順（WKB の内部格納順と同じ）/ KML coordinates use (longitude, latitude) order (same as WKB internal storage)
+- GIS ツール（Google Earth 等）との連携に使用 / Used for integration with GIS tools (Google Earth, etc.)
+
+#### 使用例 (Examples)
+
+```sql
+-- 点 / Point
+SELECT stx_askml(ST_GeomFromText('POINT(10 20)'));
+-- <Point><coordinates>10,20</coordinates></Point>
+
+-- Geographic 座標 / Geographic coordinates
+SELECT stx_askml(ST_GeomFromText('POINT(35.6 139.7)', 4326));
+-- <Point><coordinates>139.7,35.6</coordinates></Point>
+
+-- 精度指定 / Custom precision
+SELECT stx_askml(ST_GeomFromText('POINT(1.23456789 9.87654321)'), 4);
+-- <Point><coordinates>1.235,9.877</coordinates></Point>
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_AsKML()`
+- MySQL 標準: なし
+
+---
+
+### stx_asewkt
+
+ジオメトリを EWKT (Extended Well-Known Text) 形式の文字列に変換する。SRID プレフィックス付き。
+Converts a geometry to an EWKT string with SRID prefix.
+
+```sql
+stx_asewkt(geometry) -> STRING
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+
+#### 出力形式 (Output Format)
+
+`SRID=<srid>;WKT_TEXT`
+
+EWKT は標準 WKT に SRID 情報を付加したフォーマット。PostGIS で広く使用されている。
+EWKT extends standard WKT with SRID information. Widely used in PostGIS.
+
+#### 備考 (Notes)
+
+- EWKT の座標は WKB の内部格納順（Geographic の場合は lon, lat）/ EWKT coordinates follow WKB internal order (lon, lat for Geographic)
+- MySQL の `ST_AsText()` は SRID を出力しないため、SRID を保持したいテキスト表現として有用 / Useful when you need text representation that preserves SRID, as MySQL's `ST_AsText()` does not output SRID
+
+#### 使用例 (Examples)
+
+```sql
+-- Cartesian
+SELECT stx_asewkt(ST_GeomFromText('POINT(1 2)'));
+-- SRID=0;POINT(1 2)
+
+-- Geographic
+SELECT stx_asewkt(ST_GeomFromText('POINT(35.6 139.7)', 4326));
+-- SRID=4326;POINT(139.7 35.6)
+
+-- LineString
+SELECT stx_asewkt(ST_GeomFromText('LINESTRING(0 0, 10 10)'));
+-- SRID=0;LINESTRING(0 0,10 10)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_AsEWKT()`
+- MySQL 標準: なし
+
+---
+
+### stx_geomfromewkt
+
+EWKT (Extended Well-Known Text) 文字列からジオメトリを構築する。
+Creates a geometry from an EWKT string.
+
+```sql
+stx_geomfromewkt(text) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| text | STRING | EWKT 文字列 / EWKT string |
+
+#### 入力形式 (Input Format)
+
+`SRID=<srid>;WKT_TEXT` または SRID プレフィックスなしの標準 WKT（SRID は 0 となる）。
+`SRID=<srid>;WKT_TEXT` or standard WKT without SRID prefix (defaults to SRID 0).
+
+対応するジオメトリ型 / Supported geometry types: POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING, MULTIPOLYGON
+
+#### 備考 (Notes)
+
+- SRID プレフィックスは大文字小文字を区別しない / SRID prefix is case-insensitive
+- EWKT の座標は WKB 順（Geographic の場合は lon, lat）で指定する / EWKT coordinates use WKB order (lon, lat for Geographic)
+- `stx_asewkt` と `stx_geomfromewkt` でラウンドトリップが可能 / Round-trip with `stx_asewkt` is supported
+
+#### 使用例 (Examples)
+
+```sql
+-- SRID 付き / With SRID
+SELECT ST_AsText(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
+-- POINT(35.6 139.7)
+
+SELECT ST_SRID(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
+-- 4326
+
+-- SRID なし（SRID 0）/ Without SRID (defaults to 0)
+SELECT ST_AsText(stx_geomfromewkt('POINT(5 10)'));
+-- POINT(5 10)
+
+-- ラウンドトリップ / Round-trip
+SELECT ST_AsText(stx_geomfromewkt(
+  stx_asewkt(ST_GeomFromText('LINESTRING(0 0, 10 10)'))));
+-- LINESTRING(0 0,10 10)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_GeomFromEWKT()`
+- MySQL 標準: なし
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全17関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 17 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全29関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 29 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -972,27 +1552,39 @@ FROM performance_schema.user_defined_functions
 WHERE UDF_NAME LIKE 'stx_%'
 ORDER BY UDF_NAME;
 
-+---------------------------+-----------------+
-| UDF_NAME                  | UDF_RETURN_TYPE |
-+---------------------------+-----------------+
-| stx_angle                 | double          |
-| stx_azimuth               | double          |
-| stx_coveredby             | integer         |
-| stx_covers                | integer         |
-| stx_dwithin               | integer         |
-| stx_linelocatepoint       | double          |
-| stx_linesubstring         | char            |
-| stx_perimeter             | double          |
-| stx_project               | char            |
-| stx_rotate                | char            |
-| stx_scale                 | char            |
-| stx_translate             | char            |
-| stx_closestpoint          | char            |
-| stx_pointonsurface        | char            |
-| stx_relate                | char            |
-| stx_relatematch           | integer         |
-| stx_reverse               | char            |
-+---------------------------+-----------------+
++--------------------------------+-----------------+
+| UDF_NAME                       | UDF_RETURN_TYPE |
++--------------------------------+-----------------+
+| stx_affine                     | char            |
+| stx_angle                      | double          |
+| stx_asencodedpolyline         | char            |
+| stx_asewkt                     | char            |
+| stx_askml                      | char            |
+| stx_assvg                      | char            |
+| stx_azimuth                    | double          |
+| stx_closestpoint               | char            |
+| stx_coveredby                  | integer         |
+| stx_covers                     | integer         |
+| stx_dwithin                    | integer         |
+| stx_generatepoints             | char            |
+| stx_geomfromewkt               | char            |
+| stx_linefromenccodedpolyline   | char            |
+| stx_linelocatepoint            | double          |
+| stx_linesubstring              | char            |
+| stx_makepoint                  | char            |
+| stx_perimeter                  | double          |
+| stx_pointonsurface             | char            |
+| stx_project                    | char            |
+| stx_relate                     | char            |
+| stx_relatematch                | integer         |
+| stx_removerepeatedpoints       | char            |
+| stx_reverse                    | char            |
+| stx_rotate                     | char            |
+| stx_scale                      | char            |
+| stx_segmentize                 | char            |
+| stx_snaptogrid                 | char            |
+| stx_translate                  | char            |
++--------------------------------+-----------------+
 ```
 
 `UDF_RETURN_TYPE` が `char` の関数は、実際にはジオメトリのバイナリ（SRID + WKB）を返す。UDF の仕様上 GEOMETRY 型を直接返せないため `STRING_RESULT` で登録している。`ST_AsText()` 等に渡せばジオメトリとして正しく解釈される。

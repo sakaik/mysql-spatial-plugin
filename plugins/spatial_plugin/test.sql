@@ -690,6 +690,443 @@ CALL assert_eq_int(
   NULL);
 
 -- =============================================================================
+-- stx_makepoint
+-- =============================================================================
+
+CALL assert_eq_text(
+  'makepoint: basic (x=1, y=2)',
+  ST_AsText(stx_makepoint(1, 2)),
+  'POINT(1 2)');
+
+CALL assert_eq_int(
+  'makepoint: default SRID is 0',
+  ST_SRID(stx_makepoint(1, 2)),
+  0);
+
+CALL assert_eq_int(
+  'makepoint: explicit SRID 4326',
+  ST_SRID(stx_makepoint(139.7, 35.6, 4326)),
+  4326);
+
+CALL assert_eq_text(
+  'makepoint: NULL x returns NULL',
+  ST_AsText(stx_makepoint(NULL, 1)),
+  NULL);
+
+CALL assert_eq_text(
+  'makepoint: NULL srid returns NULL',
+  ST_AsText(stx_makepoint(1, 2, NULL)),
+  NULL);
+
+-- =============================================================================
+-- stx_affine
+-- =============================================================================
+
+-- Identity: affine(geom, 1,0,0,1, 0,0) = geom
+CALL assert_eq_text(
+  'affine: identity transform',
+  ST_AsText(stx_affine(ST_GeomFromText('POINT(3 4)'), 1, 0, 0, 1, 0, 0)),
+  'POINT(3 4)');
+
+-- Translation: affine(geom, 1,0,0,1, dx,dy)
+CALL assert_eq_text(
+  'affine: translation (+10, +20)',
+  ST_AsText(stx_affine(ST_GeomFromText('POINT(1 2)'), 1, 0, 0, 1, 10, 20)),
+  'POINT(11 22)');
+
+-- Scale: affine(geom, sx,0,0,sy, 0,0)
+CALL assert_eq_text(
+  'affine: scale (2x, 3x)',
+  ST_AsText(stx_affine(ST_GeomFromText('POINT(3 4)'), 2, 0, 0, 3, 0, 0)),
+  'POINT(6 12)');
+
+-- Reflection across X axis: affine(geom, 1,0,0,-1, 0,0)
+CALL assert_eq_text(
+  'affine: reflect across X axis',
+  ST_AsText(stx_affine(ST_GeomFromText('POINT(3 4)'), 1, 0, 0, -1, 0, 0)),
+  'POINT(3 -4)');
+
+-- Shear: affine(geom, 1,2,0,1, 0,0) → x'=x+2y, y'=y
+CALL assert_eq_text(
+  'affine: shear (b=2)',
+  ST_AsText(stx_affine(ST_GeomFromText('POINT(1 3)'), 1, 2, 0, 1, 0, 0)),
+  'POINT(7 3)');
+
+-- LineString
+CALL assert_eq_text(
+  'affine: linestring translate',
+  ST_AsText(stx_affine(ST_GeomFromText('LINESTRING(0 0, 1 1)'), 1, 0, 0, 1, 5, 5)),
+  'LINESTRING(5 5,6 6)');
+
+-- NULL input
+CALL assert_eq_text(
+  'affine: NULL geometry returns NULL',
+  ST_AsText(stx_affine(NULL, 1, 0, 0, 1, 0, 0)),
+  NULL);
+
+-- =============================================================================
+-- stx_snaptogrid
+-- =============================================================================
+
+CALL assert_eq_text(
+  'snaptogrid: point snap to 0.5',
+  ST_AsText(stx_snaptogrid(ST_GeomFromText('POINT(1.23 4.56)'), 0.5)),
+  'POINT(1 4.5)');
+
+CALL assert_eq_text(
+  'snaptogrid: point snap to 1',
+  ST_AsText(stx_snaptogrid(ST_GeomFromText('POINT(1.6 2.4)'), 1)),
+  'POINT(2 2)');
+
+CALL assert_eq_text(
+  'snaptogrid: linestring snap to 1',
+  ST_AsText(stx_snaptogrid(ST_GeomFromText('LINESTRING(0.1 0.2, 1.6 2.7, 3.3 4.8)'), 1)),
+  'LINESTRING(0 0,2 3,3 5)');
+
+-- Separate X and Y grid sizes
+CALL assert_eq_text(
+  'snaptogrid: different x/y sizes',
+  ST_AsText(stx_snaptogrid(ST_GeomFromText('POINT(1.7 2.3)'), 1, 0.5)),
+  'POINT(2 2.5)');
+
+-- size=0: no change
+CALL assert_eq_text(
+  'snaptogrid: size=0 no change',
+  ST_AsText(stx_snaptogrid(ST_GeomFromText('POINT(1.23 4.56)'), 0)),
+  'POINT(1.23 4.56)');
+
+-- NULL input
+CALL assert_eq_text(
+  'snaptogrid: NULL returns NULL',
+  ST_AsText(stx_snaptogrid(NULL, 1)),
+  NULL);
+
+-- =============================================================================
+-- stx_removerepeatedpoints
+-- =============================================================================
+
+-- Exact duplicates in linestring
+CALL assert_eq_text(
+  'removerepeatedpoints: exact duplicates',
+  ST_AsText(stx_removerepeatedpoints(ST_GeomFromText('LINESTRING(0 0, 0 0, 1 1, 1 1, 2 2)'))),
+  'LINESTRING(0 0,1 1,2 2)');
+
+-- No duplicates: unchanged
+CALL assert_eq_text(
+  'removerepeatedpoints: no duplicates',
+  ST_AsText(stx_removerepeatedpoints(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)'))),
+  'LINESTRING(0 0,1 1,2 2)');
+
+-- Tolerance-based removal
+CALL assert_eq_text(
+  'removerepeatedpoints: tolerance removes near points',
+  ST_AsText(stx_removerepeatedpoints(
+    ST_GeomFromText('LINESTRING(0 0, 0.001 0.001, 1 1, 1.001 1.001, 2 2)'), 0.01)),
+  'LINESTRING(0 0,1 1,2 2)');
+
+-- Polygon: duplicates removed, ring stays valid
+CALL assert_eq_text(
+  'removerepeatedpoints: polygon removes duplicates',
+  ST_AsText(stx_removerepeatedpoints(
+    ST_GeomFromText('POLYGON((0 0, 0 0, 1 0, 1 0, 1 1, 1 1, 0 0))'))),
+  'POLYGON((0 0,1 1,1 0,0 0))');
+
+-- NULL input
+CALL assert_eq_text(
+  'removerepeatedpoints: NULL returns NULL',
+  ST_AsText(stx_removerepeatedpoints(NULL)),
+  NULL);
+
+-- =============================================================================
+-- stx_segmentize
+-- =============================================================================
+
+-- Line from 0,0 to 10,0 with max_length=3 → 4 segments
+CALL assert_eq_text(
+  'segmentize: line 10 units, max 3',
+  ST_AsText(stx_segmentize(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 3)),
+  'LINESTRING(0 0,2.5 0,5 0,7.5 0,10 0)');
+
+-- Already short enough: no change
+CALL assert_eq_text(
+  'segmentize: already short, no change',
+  ST_AsText(stx_segmentize(ST_GeomFromText('LINESTRING(0 0, 1 0)'), 5)),
+  'LINESTRING(0 0,1 0)');
+
+-- Point: unchanged
+CALL assert_eq_text(
+  'segmentize: point unchanged',
+  ST_AsText(stx_segmentize(ST_GeomFromText('POINT(1 2)'), 1)),
+  'POINT(1 2)');
+
+-- Polygon: 10-unit sides split into 2 segments each (max_length=6)
+CALL assert_eq_text(
+  'segmentize: polygon densified',
+  ST_AsText(stx_segmentize(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 6)),
+  'POLYGON((0 0,0 5,0 10,5 10,10 10,10 5,10 0,5 0,0 0))');
+
+-- NULL input
+CALL assert_eq_text(
+  'segmentize: NULL returns NULL',
+  ST_AsText(stx_segmentize(NULL, 1)),
+  NULL);
+
+-- =============================================================================
+-- stx_generatepoints
+-- =============================================================================
+
+-- Generate 5 points with seed → always 5 points
+CALL assert_eq_int(
+  'generatepoints: returns correct count',
+  ST_NumGeometries(stx_generatepoints(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 5, 42)),
+  5);
+
+-- Reproducible with same seed
+CALL assert_eq_text(
+  'generatepoints: same seed same result',
+  ST_AsText(stx_generatepoints(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 3, 123)),
+  ST_AsText(stx_generatepoints(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 3, 123)));
+
+-- All points are within the polygon
+CALL assert_eq_int(
+  'generatepoints: all points within polygon',
+  (SELECT COUNT(*) = 10 FROM JSON_TABLE(
+    ST_AsGeoJSON(stx_generatepoints(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 10, 42)),
+    '$.coordinates[*]' COLUMNS(
+      x DOUBLE PATH '$[0]',
+      y DOUBLE PATH '$[1]'
+    )
+  ) AS jt WHERE x BETWEEN 0 AND 10 AND y BETWEEN 0 AND 10),
+  1);
+
+-- NULL input
+CALL assert_eq_text(
+  'generatepoints: NULL returns NULL',
+  ST_AsText(stx_generatepoints(NULL, 5)),
+  NULL);
+
+-- Geographic polygon (SRID 4326) — ST_GeomFromText uses (lat, lon) for 4326
+CALL assert_eq_int(
+  'generatepoints: geographic polygon (SRID 4326)',
+  ST_NumGeometries(stx_generatepoints(
+    ST_GeomFromText('POLYGON((35.6 139.7, 35.6 139.8, 35.7 139.8, 35.7 139.7, 35.6 139.7))', 4326), 5, 42)),
+  5);
+
+-- =============================================================================
+-- stx_asencodedpolyline
+-- =============================================================================
+
+-- Google's example: (-120.2, 38.5), (-120.95, 40.7), (-126.453, 43.252)
+CALL assert_eq_text(
+  'asencodedpolyline: Google example',
+  stx_asencodedpolyline(ST_GeomFromText('LINESTRING(-120.2 38.5, -120.95 40.7, -126.453 43.252)')),
+  '_p~iF~ps|U_ulLnnqC_mqNvxq`@');
+
+-- Simple line
+CALL assert_eq_text(
+  'asencodedpolyline: simple line',
+  stx_asencodedpolyline(ST_GeomFromText('LINESTRING(0 0, 1 1)')),
+  '??_ibE_ibE');
+
+-- NULL input
+CALL assert_eq_text(
+  'asencodedpolyline: NULL returns NULL',
+  stx_asencodedpolyline(NULL),
+  NULL);
+
+-- =============================================================================
+-- stx_linefromenccodedpolyline
+-- =============================================================================
+
+-- Decode Google example (default SRID 4326)
+CALL assert_eq_int(
+  'linefromenccodedpolyline: default SRID is 4326',
+  ST_SRID(stx_linefromenccodedpolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@')),
+  4326);
+
+-- Decode with explicit SRID 0
+CALL assert_eq_int(
+  'linefromenccodedpolyline: explicit SRID 0',
+  ST_SRID(stx_linefromenccodedpolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@', 0)),
+  0);
+
+-- Round-trip encode/decode
+CALL assert_eq_text(
+  'linefromenccodedpolyline: round-trip',
+  ST_AsText(stx_linefromenccodedpolyline(
+    stx_asencodedpolyline(ST_GeomFromText('LINESTRING(-120.2 38.5, -120.95 40.7, -126.453 43.252)')),
+    0)),
+  'LINESTRING(-120.2 38.5,-120.95 40.7,-126.453 43.252)');
+
+-- NULL input
+CALL assert_eq_text(
+  'linefromenccodedpolyline: NULL returns NULL',
+  ST_AsText(stx_linefromenccodedpolyline(NULL)),
+  NULL);
+
+-- =============================================================================
+-- stx_assvg
+-- =============================================================================
+
+-- Point
+CALL assert_eq_text(
+  'assvg: point',
+  stx_assvg(ST_GeomFromText('POINT(1 2)')),
+  'cx="1" cy="-2"');
+
+-- LineString absolute (rel=0, default)
+CALL assert_eq_text(
+  'assvg: linestring absolute',
+  stx_assvg(ST_GeomFromText('LINESTRING(0 0, 10 10, 20 0)')),
+  'M 0 -0 L 10 -10 L 20 -0');
+
+-- LineString relative (rel=1)
+CALL assert_eq_text(
+  'assvg: linestring relative',
+  stx_assvg(ST_GeomFromText('LINESTRING(10 20, 30 40, 50 20)'), 1),
+  'M 10 -20 l 20 -20 l 20 20');
+
+-- Polygon
+CALL assert_eq_text(
+  'assvg: polygon',
+  stx_assvg(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')),
+  'M 0 -0 L 0 -10 L 10 -10 L 10 -0 L 0 -0 Z');
+
+-- Custom precision
+CALL assert_eq_text(
+  'assvg: custom precision',
+  stx_assvg(ST_GeomFromText('POINT(1.5 2.3)'), 0, 2),
+  'cx="1.5" cy="-2.3"');
+
+-- NULL input
+CALL assert_eq_text(
+  'assvg: NULL returns NULL',
+  stx_assvg(NULL),
+  NULL);
+
+-- =============================================================================
+-- stx_askml
+-- =============================================================================
+
+-- Point
+CALL assert_eq_text(
+  'askml: point',
+  stx_askml(ST_GeomFromText('POINT(10 20)')),
+  '<Point><coordinates>10,20</coordinates></Point>');
+
+-- LineString
+CALL assert_eq_text(
+  'askml: linestring',
+  stx_askml(ST_GeomFromText('LINESTRING(0 0, 10 10)')),
+  '<LineString><coordinates>0,0 10,10</coordinates></LineString>');
+
+-- Polygon
+CALL assert_eq_text(
+  'askml: polygon',
+  stx_askml(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')),
+  '<Polygon><outerBoundaryIs><LinearRing><coordinates>0,0 0,10 10,10 10,0 0,0</coordinates></LinearRing></outerBoundaryIs></Polygon>');
+
+-- Geographic (SRID 4326) - KML uses lon,lat order from WKB
+CALL assert_eq_text(
+  'askml: geographic SRID 4326',
+  stx_askml(ST_GeomFromText('POINT(35.6 139.7)', 4326)),
+  '<Point><coordinates>139.7,35.6</coordinates></Point>');
+
+-- Custom precision
+CALL assert_eq_text(
+  'askml: custom precision',
+  stx_askml(ST_GeomFromText('POINT(1.23456789 9.87654321)'), 4),
+  '<Point><coordinates>1.235,9.877</coordinates></Point>');
+
+-- NULL input
+CALL assert_eq_text(
+  'askml: NULL returns NULL',
+  stx_askml(NULL),
+  NULL);
+
+-- =============================================================================
+-- stx_asewkt
+-- =============================================================================
+
+-- Point SRID 0
+CALL assert_eq_text(
+  'asewkt: point SRID 0',
+  stx_asewkt(ST_GeomFromText('POINT(1 2)')),
+  'SRID=0;POINT(1 2)');
+
+-- Point SRID 4326 (EWKT uses lon,lat from WKB)
+CALL assert_eq_text(
+  'asewkt: point SRID 4326',
+  stx_asewkt(ST_GeomFromText('POINT(35.6 139.7)', 4326)),
+  'SRID=4326;POINT(139.7 35.6)');
+
+-- LineString
+CALL assert_eq_text(
+  'asewkt: linestring',
+  stx_asewkt(ST_GeomFromText('LINESTRING(0 0, 10 10)')),
+  'SRID=0;LINESTRING(0 0,10 10)');
+
+-- MultiPoint
+CALL assert_eq_text(
+  'asewkt: multipoint',
+  stx_asewkt(ST_GeomFromText('MULTIPOINT((1 2),(3 4))')),
+  'SRID=0;MULTIPOINT((1 2),(3 4))');
+
+-- NULL input
+CALL assert_eq_text(
+  'asewkt: NULL returns NULL',
+  stx_asewkt(NULL),
+  NULL);
+
+-- =============================================================================
+-- stx_geomfromewkt
+-- =============================================================================
+
+-- Point with SRID
+CALL assert_eq_text(
+  'geomfromewkt: point with SRID',
+  ST_AsText(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)')),
+  'POINT(35.6 139.7)');
+
+-- SRID preserved
+CALL assert_eq_int(
+  'geomfromewkt: SRID preserved',
+  ST_SRID(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)')),
+  4326);
+
+-- Without SRID prefix (defaults to SRID 0)
+CALL assert_eq_text(
+  'geomfromewkt: no SRID prefix defaults to 0',
+  ST_AsText(stx_geomfromewkt('POINT(5 10)')),
+  'POINT(5 10)');
+
+CALL assert_eq_int(
+  'geomfromewkt: no SRID gives SRID 0',
+  ST_SRID(stx_geomfromewkt('POINT(5 10)')),
+  0);
+
+-- Polygon round-trip
+CALL assert_eq_text(
+  'geomfromewkt: polygon round-trip',
+  ST_AsText(stx_geomfromewkt('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')),
+  'POLYGON((0 0,10 0,10 10,0 10,0 0))');
+
+-- EWKT round-trip via asewkt → geomfromewkt
+CALL assert_eq_text(
+  'geomfromewkt: EWKT round-trip',
+  ST_AsText(stx_geomfromewkt(stx_asewkt(ST_GeomFromText('LINESTRING(0 0, 10 10)')))),
+  'LINESTRING(0 0,10 10)');
+
+-- NULL input
+CALL assert_eq_text(
+  'geomfromewkt: NULL returns NULL',
+  ST_AsText(stx_geomfromewkt(NULL)),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

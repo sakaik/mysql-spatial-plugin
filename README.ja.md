@@ -2,9 +2,11 @@
 
 MySQL に不足している空間関数を追加するプラグインです。[Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/) を利用して実装しています。
 
-距離クエリ、空間関係判定（DE-9IM）、座標変換などの GIS 関数を提供します。Cartesian（平面直交座標系）と Geographic（WGS84 等の地理座標系）の両方に対応しています。
+距離クエリ、空間関係判定（DE-9IM）、座標変換、入出力フォーマット変換などの GIS 関数を提供します。Cartesian（平面直交座標系）と Geographic（WGS84 等の地理座標系）の両方に対応しています。
 
-## 関数一覧（17関数）
+## 関数一覧（29関数）
+
+### 空間計測・述語
 
 | 関数 | 説明 |
 |---|---|
@@ -13,18 +15,45 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `stx_covers(g1, g2)` | g1 が g2 を覆っているか判定 |
 | `stx_dwithin(g1, g2, dist)` | 2つのジオメトリ間の距離が閾値以内か判定 |
 | `stx_azimuth(p1, p2)` | p1 から p2 への方位角（ラジアン、北から時計回り） |
+| `stx_angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 |
+| `stx_relate(g1, g2)` | DE-9IM 関係行列を返す |
+| `stx_relatematch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 |
+
+### ジオメトリ処理
+
+| 関数 | 説明 |
+|---|---|
 | `stx_project(point, dist, azimuth)` | 指定距離・方位角で点を投影 |
 | `stx_linelocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） |
 | `stx_linesubstring(line, start, end)` | ラインの一部を抽出 |
-| `stx_angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 |
+| `stx_closestpoint(point, geom)` | ジオメトリ上の最近接点を返す |
+| `stx_pointonsurface(geom)` | ポリゴン内部の点を返す |
+| `stx_makepoint(x, y [, srid])` | 座標から POINT を構築 |
+| `stx_generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
+
+### 座標変換
+
+| 関数 | 説明 |
+|---|---|
 | `stx_translate(geom, dx, dy)` | ジオメトリを平行移動 |
 | `stx_scale(geom, sx, sy)` | ジオメトリを拡大・縮小 |
 | `stx_rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） |
+| `stx_affine(geom, a, b, d, e, xoff, yoff)` | 一般2Dアフィン変換 |
 | `stx_reverse(geom)` | 頂点の順序を反転 |
-| `stx_pointonsurface(geom)` | ポリゴン内部の点を返す |
-| `stx_closestpoint(point, geom)` | ジオメトリ上の最近接点を返す |
-| `stx_relate(g1, g2)` | DE-9IM 関係行列を返す |
-| `stx_relatematch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 |
+| `stx_snaptogrid(geom, size [, size_y])` | 座標をグリッドにスナップ |
+| `stx_removerepeatedpoints(geom [, tol])` | 連続する重複頂点を除去 |
+| `stx_segmentize(geom, max_length)` | 長い辺を分割（頂点追加） |
+
+### 入出力フォーマット変換
+
+| 関数 | 説明 |
+|---|---|
+| `stx_asencodedpolyline(geom [, prec])` | Google Encoded Polyline に変換 |
+| `stx_linefromenccodedpolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 |
+| `stx_assvg(geom [, rel [, prec]])` | SVG パスデータに変換 |
+| `stx_askml(geom [, prec])` | KML に変換 |
+| `stx_asewkt(geom)` | EWKT（Extended WKT）に変換 |
+| `stx_geomfromewkt(text)` | EWKT からジオメトリを構築 |
 
 詳細は [関数リファレンス](plugins/spatial_plugin/docs/function_reference.md) を参照してください。
 
@@ -79,7 +108,7 @@ make install    # .so を MySQL プラグインディレクトリにコピー
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-全17関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
+全29関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
 -- 確認
@@ -112,6 +141,14 @@ SELECT stx_relate(
     ST_GeomFromText('POINT(5 5)'),
     ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))')
 );
+
+-- KML に変換
+SELECT stx_askml(ST_GeomFromText('POINT(35.6 139.7)', 4326));
+-- <Point><coordinates>139.7,35.6</coordinates></Point>
+
+-- EWKT のラウンドトリップ
+SELECT ST_AsText(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
+-- POINT(35.6 139.7)
 ```
 
 ### 戻り値の型について
@@ -127,7 +164,7 @@ SELECT ST_AsText(stx_translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## テスト
 
 ```bash
-make test       # テストスイートを実行（85テスト）
+make test       # テストスイートを実行（149テスト）
 ```
 
 ## ライセンス
