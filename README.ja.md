@@ -10,50 +10,50 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 | 関数 | 説明 |
 |---|---|
-| `stx_perimeter(geom)` | Polygon/MultiPolygon の周長 |
-| `stx_coveredby(g1, g2)` | g1 が g2 に覆われているか判定 |
-| `stx_covers(g1, g2)` | g1 が g2 を覆っているか判定 |
-| `stx_dwithin(g1, g2, dist)` | 2つのジオメトリ間の距離が閾値以内か判定 |
-| `stx_azimuth(p1, p2)` | p1 から p2 への方位角（ラジアン、北から時計回り） |
-| `stx_angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 |
-| `stx_relate(g1, g2)` | DE-9IM 関係行列を返す |
-| `stx_relatematch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 |
+| `STX_Perimeter(geom)` | Polygon/MultiPolygon の周長 |
+| `STX_Coveredby(g1, g2)` | g1 が g2 に覆われているか判定 |
+| `STX_Covers(g1, g2)` | g1 が g2 を覆っているか判定 |
+| `STX_Dwithin(g1, g2, dist)` | 2つのジオメトリ間の距離が閾値以内か判定 |
+| `STX_Azimuth(p1, p2)` | p1 から p2 への方位角（ラジアン、北から時計回り） |
+| `STX_Angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 |
+| `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す |
+| `STX_Relatematch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 |
 
 ### ジオメトリ処理
 
 | 関数 | 説明 |
 |---|---|
-| `stx_project(point, dist, azimuth)` | 指定距離・方位角で点を投影 |
-| `stx_linelocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） |
-| `stx_linesubstring(line, start, end)` | ラインの一部を抽出 |
-| `stx_closestpoint(point, geom)` | ジオメトリ上の最近接点を返す |
-| `stx_pointonsurface(geom)` | ポリゴン内部の点を返す |
-| `stx_makepoint(x, y [, srid])` | 座標から POINT を構築 |
-| `stx_generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
+| `STX_Project(point, dist, azimuth)` | 指定距離・方位角で点を投影 |
+| `STX_Linelocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） |
+| `STX_Linesubstring(line, start, end)` | ラインの一部を抽出 |
+| `STX_Closestpoint(point, geom)` | ジオメトリ上の最近接点を返す |
+| `STX_Pointonsurface(geom)` | ポリゴン内部の点を返す |
+| `STX_Makepoint(x, y [, srid])` | 座標から POINT を構築 |
+| `STX_Generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
 
 ### 座標変換
 
 | 関数 | 説明 |
 |---|---|
-| `stx_translate(geom, dx, dy)` | ジオメトリを平行移動 |
-| `stx_scale(geom, sx, sy)` | ジオメトリを拡大・縮小 |
-| `stx_rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） |
-| `stx_affine(geom, a, b, d, e, xoff, yoff)` | 一般2Dアフィン変換 |
-| `stx_reverse(geom)` | 頂点の順序を反転 |
-| `stx_snaptogrid(geom, size [, size_y])` | 座標をグリッドにスナップ |
-| `stx_removerepeatedpoints(geom [, tol])` | 連続する重複頂点を除去 |
-| `stx_segmentize(geom, max_length)` | 長い辺を分割（頂点追加） |
+| `STX_Translate(geom, dx, dy)` | ジオメトリを平行移動 |
+| `STX_Scale(geom, sx, sy)` | ジオメトリを拡大・縮小 |
+| `STX_Rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） |
+| `STX_Affine(geom, a, b, d, e, xoff, yoff)` | 一般2Dアフィン変換 |
+| `STX_Reverse(geom)` | 頂点の順序を反転 |
+| `STX_Snaptogrid(geom, size [, size_y])` | 座標をグリッドにスナップ |
+| `STX_Removerepeatedpoints(geom [, tol])` | 連続する重複頂点を除去 |
+| `STX_Segmentize(geom, max_length)` | 長い辺を分割（頂点追加） |
 
 ### 入出力フォーマット変換
 
 | 関数 | 説明 |
 |---|---|
-| `stx_asencodedpolyline(geom [, prec])` | Google Encoded Polyline に変換 |
-| `stx_linefromenccodedpolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 |
-| `stx_assvg(geom [, rel [, prec]])` | SVG パスデータに変換 |
-| `stx_askml(geom [, prec])` | KML に変換 |
-| `stx_asewkt(geom)` | EWKT（Extended WKT）に変換 |
-| `stx_geomfromewkt(text)` | EWKT からジオメトリを構築 |
+| `STX_Asencodedpolyline(geom [, prec])` | Google Encoded Polyline に変換 |
+| `STX_Linefromenccodedpolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 |
+| `STX_Assvg(geom [, rel [, prec]])` | SVG パスデータに変換 |
+| `STX_Askml(geom [, prec])` | KML に変換 |
+| `STX_Asewkt(geom)` | EWKT（Extended WKT）に変換 |
+| `STX_Geomfromewkt(text)` | EWKT からジオメトリを構築 |
 
 詳細は [関数リファレンス](plugins/spatial_plugin/docs/function_reference.md) を参照してください。
 
@@ -120,34 +120,34 @@ SHOW STATUS LIKE 'spatial_plugin_%';
 
 ```sql
 -- ポリゴンの周長（Geographic、結果はメートル）
-SELECT stx_perimeter(ST_GeomFromText('POLYGON((139 35,140 35,140 36,139 36,139 35))', 4326));
+SELECT STX_Perimeter(ST_GeomFromText('POLYGON((139 35,140 35,140 36,139 36,139 35))', 4326));
 
 -- 2点間の距離が 1km 以内か？
-SELECT stx_dwithin(
+SELECT STX_Dwithin(
     ST_GeomFromText('POINT(139.7 35.7)', 4326),
     ST_GeomFromText('POINT(139.71 35.71)', 4326),
     1000
 );
 
 -- ポリゴンを重心を中心に 45 度回転
-SELECT stx_rotate(
+SELECT STX_Rotate(
     ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))'),
     PI()/4,
     ST_GeomFromText('POINT(5 5)')
 );
 
 -- DE-9IM 空間関係
-SELECT stx_relate(
+SELECT STX_Relate(
     ST_GeomFromText('POINT(5 5)'),
     ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))')
 );
 
 -- KML に変換
-SELECT stx_askml(ST_GeomFromText('POINT(35.6 139.7)', 4326));
+SELECT STX_Askml(ST_GeomFromText('POINT(35.6 139.7)', 4326));
 -- <Point><coordinates>139.7,35.6</coordinates></Point>
 
 -- EWKT のラウンドトリップ
-SELECT ST_AsText(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
+SELECT ST_AsText(STX_Geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
 -- POINT(35.6 139.7)
 ```
 
@@ -157,7 +157,7 @@ SELECT ST_AsText(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
 バイナリデータの中身は正しいジオメトリ形式（SRID + WKB）であり、他の空間関数にそのまま渡せます：
 
 ```sql
-SELECT ST_AsText(stx_translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
+SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 -- POINT(11 22)
 ```
 

@@ -1,6 +1,6 @@
 # STX Spatial Plugin for MySQL
 
-MySQL plugin that adds spatial functions (`stx_*`) powered by [Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/).
+MySQL plugin that adds spatial functions (`STX_*`) powered by [Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/).
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports both Cartesian and Geographic (WGS84) coordinate systems.
 
@@ -10,50 +10,50 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 
 | Function | Description |
 |---|---|
-| `stx_perimeter(geom)` | Polygon/MultiPolygon perimeter |
-| `stx_coveredby(g1, g2)` | Tests if g1 is covered by g2 |
-| `stx_covers(g1, g2)` | Tests if g1 covers g2 |
-| `stx_dwithin(g1, g2, dist)` | Tests if distance between geometries <= threshold |
-| `stx_azimuth(p1, p2)` | Bearing from p1 to p2 (radians, clockwise from north) |
-| `stx_angle(p1, p2, p3)` | Angle at p2 formed by p1-p2-p3 |
-| `stx_relate(g1, g2)` | DE-9IM relationship matrix |
-| `stx_relatematch(g1, g2, pattern)` | Test DE-9IM pattern match |
+| `STX_Perimeter(geom)` | Polygon/MultiPolygon perimeter |
+| `STX_Coveredby(g1, g2)` | Tests if g1 is covered by g2 |
+| `STX_Covers(g1, g2)` | Tests if g1 covers g2 |
+| `STX_Dwithin(g1, g2, dist)` | Tests if distance between geometries <= threshold |
+| `STX_Azimuth(p1, p2)` | Bearing from p1 to p2 (radians, clockwise from north) |
+| `STX_Angle(p1, p2, p3)` | Angle at p2 formed by p1-p2-p3 |
+| `STX_Relate(g1, g2)` | DE-9IM relationship matrix |
+| `STX_Relatematch(g1, g2, pattern)` | Test DE-9IM pattern match |
 
 ### Geometry Processing
 
 | Function | Description |
 |---|---|
-| `stx_project(point, dist, azimuth)` | Project point by distance and bearing |
-| `stx_linelocatepoint(line, point)` | Fraction of line length at closest point |
-| `stx_linesubstring(line, start, end)` | Extract portion of linestring |
-| `stx_closestpoint(point, geom)` | Nearest point on geometry to given point |
-| `stx_pointonsurface(geom)` | Interior point of polygon |
-| `stx_makepoint(x, y [, srid])` | Create a point from coordinates |
-| `stx_generatepoints(geom, n [, seed])` | Generate random points inside polygon |
+| `STX_Project(point, dist, azimuth)` | Project point by distance and bearing |
+| `STX_Linelocatepoint(line, point)` | Fraction of line length at closest point |
+| `STX_Linesubstring(line, start, end)` | Extract portion of linestring |
+| `STX_Closestpoint(point, geom)` | Nearest point on geometry to given point |
+| `STX_Pointonsurface(geom)` | Interior point of polygon |
+| `STX_Makepoint(x, y [, srid])` | Create a point from coordinates |
+| `STX_Generatepoints(geom, n [, seed])` | Generate random points inside polygon |
 
 ### Coordinate Transformations
 
 | Function | Description |
 |---|---|
-| `stx_translate(geom, dx, dy)` | Shift geometry by offset |
-| `stx_scale(geom, sx, sy)` | Scale geometry by factors |
-| `stx_rotate(geom, angle [, center])` | Rotate geometry (origin or specified center) |
-| `stx_affine(geom, a, b, d, e, xoff, yoff)` | General 2D affine transformation |
-| `stx_reverse(geom)` | Reverse vertex order |
-| `stx_snaptogrid(geom, size [, size_y])` | Snap coordinates to grid |
-| `stx_removerepeatedpoints(geom [, tol])` | Remove consecutive duplicate vertices |
-| `stx_segmentize(geom, max_length)` | Split long segments by adding vertices |
+| `STX_Translate(geom, dx, dy)` | Shift geometry by offset |
+| `STX_Scale(geom, sx, sy)` | Scale geometry by factors |
+| `STX_Rotate(geom, angle [, center])` | Rotate geometry (origin or specified center) |
+| `STX_Affine(geom, a, b, d, e, xoff, yoff)` | General 2D affine transformation |
+| `STX_Reverse(geom)` | Reverse vertex order |
+| `STX_Snaptogrid(geom, size [, size_y])` | Snap coordinates to grid |
+| `STX_Removerepeatedpoints(geom [, tol])` | Remove consecutive duplicate vertices |
+| `STX_Segmentize(geom, max_length)` | Split long segments by adding vertices |
 
 ### I/O Format Conversion
 
 | Function | Description |
 |---|---|
-| `stx_asencodedpolyline(geom [, prec])` | Geometry to Google Encoded Polyline |
-| `stx_linefromenccodedpolyline(text [, srid [, prec]])` | Encoded Polyline to LineString |
-| `stx_assvg(geom [, rel [, prec]])` | Geometry to SVG path data |
-| `stx_askml(geom [, prec])` | Geometry to KML |
-| `stx_asewkt(geom)` | Geometry to EWKT (Extended WKT) |
-| `stx_geomfromewkt(text)` | EWKT to Geometry |
+| `STX_Asencodedpolyline(geom [, prec])` | Geometry to Google Encoded Polyline |
+| `STX_Linefromenccodedpolyline(text [, srid [, prec]])` | Encoded Polyline to LineString |
+| `STX_Assvg(geom [, rel [, prec]])` | Geometry to SVG path data |
+| `STX_Askml(geom [, prec])` | Geometry to KML |
+| `STX_Asewkt(geom)` | Geometry to EWKT (Extended WKT) |
+| `STX_Geomfromewkt(text)` | EWKT to Geometry |
 
 See [Function Reference](plugins/spatial_plugin/docs/function_reference.md) for full documentation.
 
@@ -120,34 +120,34 @@ SHOW STATUS LIKE 'spatial_plugin_%';
 
 ```sql
 -- Perimeter of a polygon (geographic, result in meters)
-SELECT stx_perimeter(ST_GeomFromText('POLYGON((139 35,140 35,140 36,139 36,139 35))', 4326));
+SELECT STX_Perimeter(ST_GeomFromText('POLYGON((139 35,140 35,140 36,139 36,139 35))', 4326));
 
 -- Is point within 1km of another point?
-SELECT stx_dwithin(
+SELECT STX_Dwithin(
     ST_GeomFromText('POINT(139.7 35.7)', 4326),
     ST_GeomFromText('POINT(139.71 35.71)', 4326),
     1000
 );
 
 -- Rotate polygon 45 degrees around its centroid
-SELECT stx_rotate(
+SELECT STX_Rotate(
     ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))'),
     PI()/4,
     ST_GeomFromText('POINT(5 5)')
 );
 
 -- DE-9IM spatial relationship
-SELECT stx_relate(
+SELECT STX_Relate(
     ST_GeomFromText('POINT(5 5)'),
     ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))')
 );
 
 -- Convert to KML
-SELECT stx_askml(ST_GeomFromText('POINT(35.6 139.7)', 4326));
+SELECT STX_Askml(ST_GeomFromText('POINT(35.6 139.7)', 4326));
 -- <Point><coordinates>139.7,35.6</coordinates></Point>
 
 -- EWKT round-trip
-SELECT ST_AsText(stx_geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
+SELECT ST_AsText(STX_Geomfromewkt('SRID=4326;POINT(139.7 35.6)'));
 -- POINT(35.6 139.7)
 ```
 
@@ -157,7 +157,7 @@ Functions returning geometry use `STRING_RESULT` (MySQL UDF limitation).
 The binary data is valid geometry (SRID + WKB) and works directly with other spatial functions:
 
 ```sql
-SELECT ST_AsText(stx_translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
+SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 -- POINT(11 22)
 ```
 
