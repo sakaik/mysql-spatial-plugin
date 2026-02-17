@@ -1127,6 +1127,143 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- stx_minimumboundingcircle
+-- =============================================================================
+
+-- Square polygon: MBC should be circumscribed circle
+-- Diagonal of 10x10 square = 10*sqrt(2), radius = 5*sqrt(2) ≈ 7.071
+-- Area ≈ π * (5√2)² = 50π ≈ 157.08
+CALL assert_eq_double(
+  'minimumboundingcircle: square polygon area',
+  ROUND(ST_Area(stx_minimumboundingcircle(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))), 1),
+  157.1, 0.1);
+
+-- Triangle: circumradius R = abc/(4K) = 10*√125*√125/(4*50) = 6.25
+-- Area = π * 6.25² ≈ 122.72
+CALL assert_eq_double(
+  'minimumboundingcircle: triangle area',
+  ROUND(ST_Area(stx_minimumboundingcircle(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 5 10, 0 0))'))), 0),
+  123, 1);
+
+-- Point → degenerate circle (radius 0, area 0)
+CALL assert_eq_double(
+  'minimumboundingcircle: single point',
+  ST_Area(stx_minimumboundingcircle(ST_GeomFromText('POINT(5 5)'))),
+  0, 0.001);
+
+-- LineString: center at midpoint
+CALL assert_eq_double(
+  'minimumboundingcircle: linestring area',
+  ROUND(ST_Area(stx_minimumboundingcircle(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'))), 1),
+  78.5, 0.2);
+
+-- Custom segments per quarter (4 = 16 total segments)
+CALL assert_eq_double(
+  'minimumboundingcircle: custom segments',
+  ROUND(ST_Area(stx_minimumboundingcircle(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 4)), 0),
+  150, 10);
+
+-- NULL input
+CALL assert_eq_text(
+  'minimumboundingcircle: NULL returns NULL',
+  ST_AsText(stx_minimumboundingcircle(NULL)),
+  NULL);
+
+-- MultiPoint
+CALL assert_eq_double(
+  'minimumboundingcircle: multipoint area',
+  ROUND(ST_Area(stx_minimumboundingcircle(
+    ST_GeomFromText('MULTIPOINT((0 0),(10 0),(10 10),(0 10))'))), 1),
+  157.1, 0.1);
+
+-- =============================================================================
+-- stx_squaregrid
+-- =============================================================================
+
+-- 10x10 area with size 5 → 4 cells
+CALL assert_eq_int(
+  'squaregrid: 4 cells for 10x10 area, size 5',
+  ST_NumGeometries(stx_squaregrid(5,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  4);
+
+-- Grid text check: first cell is (0,0)→(5,5)
+CALL assert_eq_text(
+  'squaregrid: correct cell geometry',
+  ST_AsText(stx_squaregrid(5,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  'GEOMETRYCOLLECTION(POLYGON((0 0,5 0,5 5,0 5,0 0)),POLYGON((5 0,10 0,10 5,5 5,5 0)),POLYGON((0 5,5 5,5 10,0 10,0 5)),POLYGON((5 5,10 5,10 10,5 10,5 5)))');
+
+-- 10x10 with size 10 → 1 cell
+CALL assert_eq_int(
+  'squaregrid: 1 cell for 10x10 area, size 10',
+  ST_NumGeometries(stx_squaregrid(10,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  1);
+
+-- Non-aligned bounds: 0.5-9.5 with size 5 → snaps to origin grid
+CALL assert_eq_int(
+  'squaregrid: non-aligned bounds snap to origin',
+  ST_NumGeometries(stx_squaregrid(5,
+    ST_GeomFromText('POLYGON((0.5 0.5, 9.5 0.5, 9.5 9.5, 0.5 9.5, 0.5 0.5))'))),
+  4);
+
+-- NULL input
+CALL assert_eq_text(
+  'squaregrid: NULL geom returns NULL',
+  ST_AsText(stx_squaregrid(5, NULL)),
+  NULL);
+
+-- LineString bounds
+CALL assert_eq_int(
+  'squaregrid: linestring bounds',
+  ST_NumGeometries(stx_squaregrid(5,
+    ST_GeomFromText('LINESTRING(0 0, 10 10)'))),
+  4);
+
+-- =============================================================================
+-- stx_hexgrid
+-- =============================================================================
+
+-- Basic hex grid
+CALL assert_eq_int(
+  'hexgrid: produces cells',
+  ST_NumGeometries(stx_hexgrid(5,
+    ST_GeomFromText('POLYGON((0 0, 20 0, 20 20, 0 20, 0 0))'))) > 0,
+  1);
+
+-- Each cell is a polygon with 7 ring points (6 vertices + closing)
+CALL assert_eq_int(
+  'hexgrid: each cell has 7 ring points',
+  ST_NumPoints(ST_ExteriorRing(ST_GeometryN(stx_hexgrid(5,
+    ST_GeomFromText('POLYGON((0 0, 20 0, 20 20, 0 20, 0 0))')), 1))),
+  7);
+
+-- Small area with large hex → at least 1 cell
+CALL assert_eq_int(
+  'hexgrid: small area gets at least 1 cell',
+  ST_NumGeometries(stx_hexgrid(100,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))) >= 1,
+  1);
+
+-- NULL input
+CALL assert_eq_text(
+  'hexgrid: NULL geom returns NULL',
+  ST_AsText(stx_hexgrid(5, NULL)),
+  NULL);
+
+-- Result is a GEOMETRYCOLLECTION
+CALL assert_eq_text(
+  'hexgrid: result is GEOMETRYCOLLECTION',
+  ST_GeometryType(stx_hexgrid(5,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  'GEOMCOLLECTION');
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

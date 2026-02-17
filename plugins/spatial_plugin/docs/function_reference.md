@@ -67,6 +67,9 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Askml](#stx_askml) | STRING | KML 出力 / Geometry to KML |
 | [STX_Asewkt](#stx_asewkt) | STRING | EWKT 出力 / Geometry to EWKT |
 | [STX_Geomfromewkt](#stx_geomfromewkt) | GEOMETRY | EWKT 入力 / EWKT to Geometry |
+| [STX_Minimumboundingcircle](#stx_minimumboundingcircle) | GEOMETRY | 最小外接円 / Minimum bounding circle |
+| [STX_Squaregrid](#stx_squaregrid) | GEOMETRY | 矩形グリッド生成 / Square grid generation |
+| [STX_Hexgrid](#stx_hexgrid) | GEOMETRY | 六角形グリッド生成 / Hexagonal grid generation |
 
 ---
 
@@ -1532,14 +1535,174 @@ SELECT ST_AsText(STX_Geomfromewkt(
 
 ---
 
+### STX_Minimumboundingcircle
+
+任意のジオメトリの全頂点を包含する最小の円（Minimum Bounding Circle）を Polygon として返す。
+Returns the smallest circle that encloses all vertices of a geometry, approximated as a Polygon.
+
+```sql
+STX_Minimumboundingcircle(geometry [, segs_per_quarter]) -> GEOMETRY (Polygon)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 任意のジオメトリ / Any geometry type |
+| segs_per_quarter | INTEGER | (任意) 四分円あたりのセグメント数。デフォルト 48（全周 192 セグメント） / (Optional) Segments per quarter circle. Default: 48 (192 total) |
+
+#### 戻り値 (Return Value)
+
+入力ジオメトリの全頂点を包含する最小の円を近似した Polygon。入力と同じ SRID を持つ。
+A Polygon approximating the minimum enclosing circle of all vertices. Same SRID as input.
+
+#### アルゴリズム (Algorithm)
+
+Welzl のアルゴリズム（期待計算量 O(n)）を使用して最小外接円の中心と半径を求め、指定したセグメント数で円を Polygon に近似する。
+Uses Welzl's algorithm (expected O(n)) to find the minimum enclosing circle center and radius, then approximates it as a Polygon with the specified number of segments.
+
+#### 使用例 (Examples)
+
+```sql
+-- 正方形の最小外接円 / MBC of a square
+-- 対角線 = 10√2, 半径 = 5√2, 面積 ≈ 50π ≈ 157.08
+SELECT ROUND(ST_Area(STX_Minimumboundingcircle(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))), 1);
+-- 157.1
+
+-- セグメント数を減らした粗い円 / Coarse circle with fewer segments
+SELECT ST_NumPoints(ST_ExteriorRing(STX_Minimumboundingcircle(
+  ST_GeomFromText('POINT(0 0)'), 4)));
+-- 17 (4*4 + 1 closing point)
+
+-- MultiPoint の外接円 / MBC of MultiPoint
+SELECT ROUND(ST_Area(STX_Minimumboundingcircle(
+  ST_GeomFromText('MULTIPOINT((0 0),(10 0),(10 10),(0 10))'))), 1);
+-- 157.1
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_MinimumBoundingCircle()`
+- MySQL 標準: なし
+
+---
+
+### STX_Squaregrid
+
+入力ジオメトリのバウンディングボックスを覆う正方形グリッドを GeometryCollection として返す。
+Returns a GeometryCollection of square grid cells covering the bounding box of the input geometry.
+
+```sql
+STX_Squaregrid(size, geometry) -> GEOMETRY (GeometryCollection)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| size | DOUBLE | セルの辺の長さ / Side length of each square cell |
+| geometry | GEOMETRY | バウンディングボックスを決定するジオメトリ / Geometry whose bounding box defines the grid extent |
+
+#### 戻り値 (Return Value)
+
+入力ジオメトリのバウンディングボックスを覆う Polygon（正方形）の GeometryCollection。グリッドは原点 (0,0) にスナップされるため、異なる入力でも同じサイズのグリッドはタイル状に整列する。
+A GeometryCollection of square Polygons covering the input's bounding box. Grid is snapped to origin (0,0) so grids of the same size from different inputs will tile seamlessly.
+
+#### 備考 (Notes)
+
+- 安全上の上限として最大 1,000,000 セルまで生成 / Maximum 1,000,000 cells for safety
+- Cartesian / Geographic 両対応（座標空間で動作） / Works in both Cartesian and Geographic coordinate space
+
+#### 使用例 (Examples)
+
+```sql
+-- 10x10 の正方形を 5 単位のグリッドで分割 → 4 セル / 10x10 square with size 5 → 4 cells
+SELECT ST_AsText(STX_Squaregrid(5,
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- GEOMETRYCOLLECTION(
+--   POLYGON((0 0,5 0,5 5,0 5,0 0)),
+--   POLYGON((5 0,10 0,10 5,5 5,5 0)),
+--   POLYGON((0 5,5 5,5 10,0 10,0 5)),
+--   POLYGON((5 5,10 5,10 10,5 10,5 5)))
+
+-- セル数の確認 / Check cell count
+SELECT ST_NumGeometries(STX_Squaregrid(5,
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- 4
+
+-- Geographic 座標（度単位のグリッド）/ Geographic coordinates (grid in degrees)
+SELECT ST_NumGeometries(STX_Squaregrid(0.01,
+  ST_GeomFromText('POLYGON((35.6 139.7, 35.6 139.71, 35.61 139.71, 35.61 139.7, 35.6 139.7))', 4326)));
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_SquareGrid()`
+- MySQL 標準: なし
+
+---
+
+### STX_Hexgrid
+
+入力ジオメトリのバウンディングボックスを覆する六角形（フラットトップ）グリッドを GeometryCollection として返す。
+Returns a GeometryCollection of flat-top hexagonal grid cells covering the bounding box of the input geometry.
+
+```sql
+STX_Hexgrid(size, geometry) -> GEOMETRY (GeometryCollection)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| size | DOUBLE | 六角形の辺の長さ / Edge length of each hexagon |
+| geometry | GEOMETRY | バウンディングボックスを決定するジオメトリ / Geometry whose bounding box defines the grid extent |
+
+#### 戻り値 (Return Value)
+
+入力ジオメトリのバウンディングボックスを覆う Polygon（六角形）の GeometryCollection。フラットトップ型の六角形で、隣接する列は半行ずつオフセットされる。グリッドは原点 (0,0) にスナップされる。
+A GeometryCollection of hexagonal Polygons covering the input's bounding box. Uses flat-top hexagons with alternating column offsets. Grid is snapped to origin (0,0).
+
+#### 備考 (Notes)
+
+- 六角形はフラットトップ型（横幅 = 2×size、高さ = √3×size） / Hexagons are flat-top (width = 2×size, height = √3×size)
+- 列間隔 = 1.5 × size、行間隔 = √3 × size / Column spacing = 1.5 × size, row spacing = √3 × size
+- 安全上の上限として最大 1,000,000 セルまで生成 / Maximum 1,000,000 cells for safety
+
+#### 使用例 (Examples)
+
+```sql
+-- 20x20 の領域を辺長 5 の六角形で覆う / Cover 20x20 area with hexagons of edge length 5
+SELECT ST_NumGeometries(STX_Hexgrid(5,
+  ST_GeomFromText('POLYGON((0 0, 20 0, 20 20, 0 20, 0 0))')));
+
+-- 各セルは 7 点（6 頂点 + 閉合点）/ Each cell has 7 ring points (6 vertices + closing)
+SELECT ST_NumPoints(ST_ExteriorRing(ST_GeometryN(STX_Hexgrid(5,
+  ST_GeomFromText('POLYGON((0 0, 20 0, 20 20, 0 20, 0 0))')), 1)));
+-- 7
+
+-- 結果は GEOMETRYCOLLECTION 型 / Result is a GEOMETRYCOLLECTION
+SELECT ST_GeometryType(STX_Hexgrid(5,
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- GEOMCOLLECTION
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_HexagonGrid()`
+- MySQL 標準: なし
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全29関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 29 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全32関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 32 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -1568,10 +1731,12 @@ ORDER BY UDF_NAME;
 | STX_Dwithin                    | integer         |
 | STX_Generatepoints             | char            |
 | STX_Geomfromewkt               | char            |
+| STX_Hexgrid                    | char            |
 | STX_Linefromenccodedpolyline   | char            |
 | STX_Linelocatepoint            | double          |
 | STX_Linesubstring              | char            |
 | STX_Makepoint                  | char            |
+| STX_Minimumboundingcircle      | char            |
 | STX_Perimeter                  | double          |
 | STX_Pointonsurface             | char            |
 | STX_Project                    | char            |
@@ -1583,6 +1748,7 @@ ORDER BY UDF_NAME;
 | STX_Scale                      | char            |
 | STX_Segmentize                 | char            |
 | STX_Snaptogrid                 | char            |
+| STX_Squaregrid                 | char            |
 | STX_Translate                  | char            |
 +--------------------------------+-----------------+
 ```

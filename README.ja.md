@@ -4,7 +4,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 距離クエリ、空間関係判定（DE-9IM）、座標変換、入出力フォーマット変換などの GIS 関数を提供します。Cartesian（平面直交座標系）と Geographic（WGS84 等の地理座標系）の両方に対応しています。
 
-## 関数一覧（29関数）
+## 関数一覧（32関数）
 
 ### 空間計測・述語
 
@@ -30,6 +30,9 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Pointonsurface(geom)` | ポリゴン内部の点を返す |
 | `STX_Makepoint(x, y [, srid])` | 座標から POINT を構築 |
 | `STX_Generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
+| `STX_Minimumboundingcircle(geom [, segs])` | 最小外接円（Polygon として返却） |
+| `STX_Squaregrid(size, geom)` | バウンディングボックスを覆う矩形グリッド |
+| `STX_Hexgrid(size, geom)` | バウンディングボックスを覆う六角形グリッド |
 
 ### 座標変換
 
@@ -108,7 +111,7 @@ make install    # .so を MySQL プラグインディレクトリにコピー
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-全29関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
+全32関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
 -- 確認

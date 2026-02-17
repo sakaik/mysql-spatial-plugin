@@ -1963,6 +1963,404 @@ static void stx_generatepoints_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+}  // extern "C" (pause for MBC/grid helpers)
+
+// ===== MinimumBoundingCircle helpers =========================================
+
+struct MBCircle {
+  double cx, cy, r;
+};
+
+static MBCircle mbc_from_one(double x, double y) { return {x, y, 0.0}; }
+
+static MBCircle mbc_from_two(double x1, double y1, double x2, double y2) {
+  return {(x1 + x2) / 2.0, (y1 + y2) / 2.0,
+          std::hypot(x2 - x1, y2 - y1) / 2.0};
+}
+
+static MBCircle mbc_from_three(double x1, double y1, double x2, double y2,
+                                double x3, double y3) {
+  double D = 2.0 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+  if (std::abs(D) < 1e-14) {
+    // Collinear: use the two farthest points
+    double d12 = std::hypot(x2 - x1, y2 - y1);
+    double d23 = std::hypot(x3 - x2, y3 - y2);
+    double d13 = std::hypot(x3 - x1, y3 - y1);
+    if (d12 >= d23 && d12 >= d13) return mbc_from_two(x1, y1, x2, y2);
+    if (d23 >= d13) return mbc_from_two(x2, y2, x3, y3);
+    return mbc_from_two(x1, y1, x3, y3);
+  }
+  double a = x1 * x1 + y1 * y1;
+  double b = x2 * x2 + y2 * y2;
+  double c = x3 * x3 + y3 * y3;
+  double ux = (a * (y2 - y3) + b * (y3 - y1) + c * (y1 - y2)) / D;
+  double uy = (a * (x3 - x2) + b * (x1 - x3) + c * (x2 - x1)) / D;
+  return {ux, uy, std::hypot(x1 - ux, y1 - uy)};
+}
+
+static bool mbc_contains(const MBCircle &c, double px, double py) {
+  double dx = px - c.cx, dy = py - c.cy;
+  return dx * dx + dy * dy <= (c.r + 1e-10) * (c.r + 1e-10);
+}
+
+// Welzl's algorithm (iterative, expected O(n)).
+static MBCircle welzl(std::vector<std::pair<double, double>> &pts) {
+  std::mt19937 rng(42);
+  std::shuffle(pts.begin(), pts.end(), rng);
+  size_t n = pts.size();
+  if (n == 0) return {0, 0, 0};
+  if (n == 1) return mbc_from_one(pts[0].first, pts[0].second);
+
+  MBCircle c = mbc_from_two(pts[0].first, pts[0].second,
+                             pts[1].first, pts[1].second);
+  for (size_t i = 2; i < n; ++i) {
+    if (!mbc_contains(c, pts[i].first, pts[i].second)) {
+      c = mbc_from_two(pts[0].first, pts[0].second,
+                        pts[i].first, pts[i].second);
+      for (size_t j = 1; j < i; ++j) {
+        if (!mbc_contains(c, pts[j].first, pts[j].second)) {
+          c = mbc_from_two(pts[j].first, pts[j].second,
+                            pts[i].first, pts[i].second);
+          for (size_t k = 0; k < j; ++k) {
+            if (!mbc_contains(c, pts[k].first, pts[k].second)) {
+              c = mbc_from_three(pts[k].first, pts[k].second,
+                                  pts[j].first, pts[j].second,
+                                  pts[i].first, pts[i].second);
+            }
+          }
+        }
+      }
+    }
+  }
+  return c;
+}
+
+// Collect all coordinates from a variant geometry.
+template <typename Variant>
+static void collect_points(const Variant &geom,
+                            std::vector<std::pair<double, double>> &pts) {
+  std::visit(
+      [&pts](const auto &g) {
+        using T = std::decay_t<decltype(g)>;
+        if constexpr (std::is_same_v<T, Point> ||
+                      std::is_same_v<T, GeoPoint>) {
+          pts.emplace_back(bg::get<0>(g), bg::get<1>(g));
+        } else if constexpr (std::is_same_v<T, Linestring> ||
+                              std::is_same_v<T, GeoLinestring>) {
+          for (const auto &pt : g)
+            pts.emplace_back(bg::get<0>(pt), bg::get<1>(pt));
+        } else if constexpr (std::is_same_v<T, Polygon> ||
+                              std::is_same_v<T, GeoPolygon>) {
+          for (const auto &pt : g.outer())
+            pts.emplace_back(bg::get<0>(pt), bg::get<1>(pt));
+          for (const auto &inner : g.inners())
+            for (const auto &pt : inner)
+              pts.emplace_back(bg::get<0>(pt), bg::get<1>(pt));
+        } else if constexpr (std::is_same_v<T, MultiPoint> ||
+                              std::is_same_v<T, GeoMultiPoint>) {
+          for (const auto &pt : g)
+            pts.emplace_back(bg::get<0>(pt), bg::get<1>(pt));
+        } else if constexpr (std::is_same_v<T, MultiLinestring> ||
+                              std::is_same_v<T, GeoMultiLinestring>) {
+          for (const auto &ls : g)
+            for (const auto &pt : ls)
+              pts.emplace_back(bg::get<0>(pt), bg::get<1>(pt));
+        } else if constexpr (std::is_same_v<T, MultiPolygon> ||
+                              std::is_same_v<T, GeoMultiPolygon>) {
+          for (const auto &poly : g) {
+            for (const auto &pt : poly.outer())
+              pts.emplace_back(bg::get<0>(pt), bg::get<1>(pt));
+            for (const auto &inner : poly.inners())
+              for (const auto &pt : inner)
+                pts.emplace_back(bg::get<0>(pt), bg::get<1>(pt));
+          }
+        }
+      },
+      geom);
+}
+
+// Build a circle polygon approximation.
+template <typename PointT, typename PolygonT>
+static PolygonT make_circle_polygon(double cx, double cy, double r,
+                                     int num_segs) {
+  PolygonT poly;
+  for (int i = 0; i <= num_segs; ++i) {
+    double angle = 2.0 * M_PI * i / num_segs;
+    PointT pt;
+    bg::set<0>(pt, cx + r * std::cos(angle));
+    bg::set<1>(pt, cy + r * std::sin(angle));
+    poly.outer().push_back(pt);
+  }
+  return poly;
+}
+
+// ===== Grid helpers ==========================================================
+
+// Write a GeometryCollection of Polygons as MySQL internal format (SRID + WKB).
+template <typename PolygonT>
+static std::string write_gc_polygons(uint32_t srid,
+                                      const std::vector<PolygonT> &polys) {
+  using namespace gis_lib::detail;
+  std::string buf;
+  append_uint32(buf, srid);
+  append_wkb_header(buf, gis_lib::GeometryType::GeometryCollection);
+  append_uint32(buf, static_cast<uint32_t>(polys.size()));
+  for (const auto &poly : polys) {
+    append_wkb_header(buf, gis_lib::GeometryType::Polygon);
+    uint32_t num_rings = 1 + static_cast<uint32_t>(poly.inners().size());
+    append_uint32(buf, num_rings);
+    append_ring(buf, poly.outer());
+    for (const auto &inner : poly.inners()) append_ring(buf, inner);
+  }
+  return buf;
+}
+
+// Get bounding box from a variant geometry.
+template <typename PointT, typename Variant>
+static void get_bbox(const Variant &geom, double &minx, double &miny,
+                      double &maxx, double &maxy) {
+  using BoxT = bg::model::box<PointT>;
+  BoxT box;
+  std::visit([&box](const auto &g) { bg::envelope(g, box); }, geom);
+  minx = bg::get<bg::min_corner, 0>(box);
+  miny = bg::get<bg::min_corner, 1>(box);
+  maxx = bg::get<bg::max_corner, 0>(box);
+  maxy = bg::get<bg::max_corner, 1>(box);
+}
+
+static constexpr int MAX_GRID_CELLS = 1000000;
+
+// Generate square grid cells covering a bounding box (snapped to origin).
+template <typename PointT, typename PolygonT>
+static std::vector<PolygonT> make_square_grid(double size, double minx,
+                                               double miny, double maxx,
+                                               double maxy) {
+  std::vector<PolygonT> cells;
+  double x0 = std::floor(minx / size) * size;
+  double y0 = std::floor(miny / size) * size;
+  for (double y = y0; y < maxy; y += size) {
+    for (double x = x0; x < maxx; x += size) {
+      if (static_cast<int>(cells.size()) >= MAX_GRID_CELLS) return cells;
+      PolygonT poly;
+      double x2 = x + size, y2 = y + size;
+      PointT p;
+      bg::set<0>(p, x);  bg::set<1>(p, y);  poly.outer().push_back(p);
+      bg::set<0>(p, x2); bg::set<1>(p, y);  poly.outer().push_back(p);
+      bg::set<0>(p, x2); bg::set<1>(p, y2); poly.outer().push_back(p);
+      bg::set<0>(p, x);  bg::set<1>(p, y2); poly.outer().push_back(p);
+      bg::set<0>(p, x);  bg::set<1>(p, y);  poly.outer().push_back(p);
+      cells.push_back(std::move(poly));
+    }
+  }
+  return cells;
+}
+
+// Generate flat-top hexagonal grid cells (snapped to origin).
+// size = edge length of hexagon.
+template <typename PointT, typename PolygonT>
+static std::vector<PolygonT> make_hex_grid(double size, double minx,
+                                            double miny, double maxx,
+                                            double maxy) {
+  std::vector<PolygonT> cells;
+  double dx = 1.5 * size;                // column spacing
+  double dy = size * std::sqrt(3.0);     // row spacing
+
+  int col_start = static_cast<int>(std::floor(minx / dx)) - 1;
+  int col_end = static_cast<int>(std::ceil(maxx / dx)) + 1;
+
+  for (int col = col_start; col <= col_end; ++col) {
+    double cx = col * dx;
+    if (cx + size < minx || cx - size > maxx) continue;
+
+    double y_off = (std::abs(col) % 2 == 1) ? dy / 2.0 : 0.0;
+    int row_start = static_cast<int>(std::floor((miny - y_off) / dy)) - 1;
+    int row_end = static_cast<int>(std::ceil((maxy - y_off) / dy)) + 1;
+
+    for (int row = row_start; row <= row_end; ++row) {
+      double cy = row * dy + y_off;
+      double half_h = size * std::sqrt(3.0) / 2.0;
+      if (cy + half_h < miny || cy - half_h > maxy) continue;
+      if (static_cast<int>(cells.size()) >= MAX_GRID_CELLS) return cells;
+
+      PolygonT poly;
+      for (int i = 0; i <= 6; ++i) {
+        double angle = M_PI / 3.0 * (i % 6);
+        PointT pt;
+        bg::set<0>(pt, cx + size * std::cos(angle));
+        bg::set<1>(pt, cy + size * std::sin(angle));
+        poly.outer().push_back(pt);
+      }
+      cells.push_back(std::move(poly));
+    }
+  }
+  return cells;
+}
+
+extern "C" {  // resume extern "C" for MBC/grid UDFs
+
+// ----- stx_minimumboundingcircle ---------------------------------------------
+// Returns minimum bounding circle as a Polygon.
+// stx_minimumboundingcircle(geom [, segs_per_quarter])
+
+static bool stx_minimumboundingcircle_init(UDF_INIT *initid, UDF_ARGS *args,
+                                            char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 2) {
+    strcpy(msg,
+           "stx_minimumboundingcircle() requires 1 or 2 arguments "
+           "(geom [, segs_per_quarter])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count == 2) args->arg_type[1] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_minimumboundingcircle(UDF_INIT *initid, UDF_ARGS *args,
+                                        char *result, unsigned long *length,
+                                        char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  if (args->arg_count == 2 && !args->args[1]) { *is_null = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+
+  int segs_per_quarter = 48;
+  if (args->arg_count == 2) {
+    segs_per_quarter =
+        static_cast<int>(*reinterpret_cast<long long *>(args->args[1]));
+    if (segs_per_quarter < 1) segs_per_quarter = 1;
+  }
+  int num_segs = segs_per_quarter * 4;
+
+  std::vector<std::pair<double, double>> pts;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry))
+    collect_points(*cv, pts);
+  else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry))
+    collect_points(*gv, pts);
+
+  if (pts.empty()) { *error = 1; return nullptr; }
+
+  MBCircle c = welzl(pts);
+
+  std::string wkb;
+  if (std::holds_alternative<CartesianVariant>(r->geometry)) {
+    auto poly = make_circle_polygon<Point, Polygon>(c.cx, c.cy, c.r, num_segs);
+    wkb = write_polygon(r->srid, poly);
+  } else {
+    auto poly =
+        make_circle_polygon<GeoPoint, GeoPolygon>(c.cx, c.cy, c.r, num_segs);
+    wkb = write_polygon(r->srid, poly);
+  }
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_minimumboundingcircle_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_squaregrid --------------------------------------------------------
+// Generates a square grid covering the bounding box of a geometry.
+// stx_squaregrid(size, geom)
+
+static bool stx_squaregrid_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_squaregrid() requires 2 arguments (size, geom)");
+    return true;
+  }
+  args->arg_type[0] = REAL_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_squaregrid(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  double size = *reinterpret_cast<double *>(args->args[0]);
+  if (size <= 0.0) { *error = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[1], args->lengths[1]);
+  if (!r) { *error = 1; return nullptr; }
+
+  double minx, miny, maxx, maxy;
+  std::string wkb;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    get_bbox<Point>(*cv, minx, miny, maxx, maxy);
+    auto cells = make_square_grid<Point, Polygon>(size, minx, miny, maxx, maxy);
+    wkb = write_gc_polygons(r->srid, cells);
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    get_bbox<GeoPoint>(*gv, minx, miny, maxx, maxy);
+    auto cells =
+        make_square_grid<GeoPoint, GeoPolygon>(size, minx, miny, maxx, maxy);
+    wkb = write_gc_polygons(r->srid, cells);
+  }
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_squaregrid_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_hexgrid -----------------------------------------------------------
+// Generates a flat-top hexagonal grid covering the bounding box of a geometry.
+// stx_hexgrid(size, geom)
+
+static bool stx_hexgrid_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_hexgrid() requires 2 arguments (size, geom)");
+    return true;
+  }
+  args->arg_type[0] = REAL_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_hexgrid(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                            unsigned long *length, char *is_null,
+                            char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  double size = *reinterpret_cast<double *>(args->args[0]);
+  if (size <= 0.0) { *error = 1; return nullptr; }
+
+  auto r = parse_geometry(args->args[1], args->lengths[1]);
+  if (!r) { *error = 1; return nullptr; }
+
+  double minx, miny, maxx, maxy;
+  std::string wkb;
+  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+    get_bbox<Point>(*cv, minx, miny, maxx, maxy);
+    auto cells = make_hex_grid<Point, Polygon>(size, minx, miny, maxx, maxy);
+    wkb = write_gc_polygons(r->srid, cells);
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+    get_bbox<GeoPoint>(*gv, minx, miny, maxx, maxy);
+    auto cells =
+        make_hex_grid<GeoPoint, GeoPolygon>(size, minx, miny, maxx, maxy);
+    wkb = write_gc_polygons(r->srid, cells);
+  }
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_hexgrid_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C" (pause for I/O format helpers)
 
 // ===== I/O Format Helpers (outside extern "C" for templates) =================
@@ -2741,6 +3139,13 @@ static const udf_entry udf_table[] = {
      stx_asewkt_deinit},
     {"stx_geomfromewkt", STRING_RESULT, (Udf_func_any)stx_geomfromewkt,
      stx_geomfromewkt_init, stx_geomfromewkt_deinit},
+    {"stx_minimumboundingcircle", STRING_RESULT,
+     (Udf_func_any)stx_minimumboundingcircle,
+     stx_minimumboundingcircle_init, stx_minimumboundingcircle_deinit},
+    {"stx_squaregrid", STRING_RESULT, (Udf_func_any)stx_squaregrid,
+     stx_squaregrid_init, stx_squaregrid_deinit},
+    {"stx_hexgrid", STRING_RESULT, (Udf_func_any)stx_hexgrid,
+     stx_hexgrid_init, stx_hexgrid_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

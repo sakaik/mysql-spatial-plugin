@@ -4,7 +4,7 @@ MySQL plugin that adds spatial functions (`STX_*`) powered by [Boost.Geometry](h
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports both Cartesian and Geographic (WGS84) coordinate systems.
 
-## Functions (29)
+## Functions (32)
 
 ### Spatial Measurement & Predicates
 
@@ -30,6 +30,9 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | `STX_Pointonsurface(geom)` | Interior point of polygon |
 | `STX_Makepoint(x, y [, srid])` | Create a point from coordinates |
 | `STX_Generatepoints(geom, n [, seed])` | Generate random points inside polygon |
+| `STX_Minimumboundingcircle(geom [, segs])` | Minimum bounding circle as polygon |
+| `STX_Squaregrid(size, geom)` | Square grid covering bounding box |
+| `STX_Hexgrid(size, geom)` | Hexagonal grid covering bounding box |
 
 ### Coordinate Transformations
 
@@ -108,7 +111,7 @@ make install    # Copy .so to MySQL plugin directory
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-All 29 functions are registered automatically. No `CREATE FUNCTION` needed.
+All 32 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
 -- Verify

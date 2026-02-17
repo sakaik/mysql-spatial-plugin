@@ -4,7 +4,7 @@
 // ---- Version: change these three values ----
 #define STX_VERSION_MAJOR  0
 #define STX_VERSION_MINOR  0   // 0-15
-#define STX_VERSION_PATCH  2   // 0-15
+#define STX_VERSION_PATCH  3   // 0-15
 
 // ---- Auto-generated from above ----
 #define STX_STR2(x) #x
