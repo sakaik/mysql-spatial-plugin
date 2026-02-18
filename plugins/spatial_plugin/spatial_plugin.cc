@@ -38,6 +38,7 @@
 #include "gis_lib/geometry_types.h"
 #include "gis_lib/wkb_parser.h"
 #include "gis_lib/wkb_writer.h"
+#include "gis_lib/geos_helper.h"
 
 using namespace gis_lib;
 
@@ -3063,6 +3064,185 @@ static void stx_geomfromewkt_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// =============================================================================
+// GEOS-based functions (Phase 4)
+// =============================================================================
+
+// ----- stx_makevalid ---------------------------------------------------------
+// Repairs invalid geometry using GEOS MakeValid algorithm.
+// stx_makevalid(geom)
+
+static bool stx_makevalid_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_makevalid() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_makevalid(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                            unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr valid(GEOSMakeValid_r(ctx, geom.get()));
+  if (!valid) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(valid.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_makevalid_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_linemerge ---------------------------------------------------------
+// Merges a MultiLineString into connected LineStrings.
+// stx_linemerge(geom)
+
+static bool stx_linemerge_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_linemerge() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_linemerge(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                            unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr merged(GEOSLineMerge_r(ctx, geom.get()));
+  if (!merged) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(merged.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_linemerge_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_voronoi -----------------------------------------------------------
+// Creates Voronoi diagram from point geometry.
+// stx_voronoi(geom [, tolerance [, envelope]])
+
+static bool stx_voronoi_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_voronoi() requires 1-3 arguments (geom [, tolerance [, envelope]])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count >= 2) args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count >= 3) args->arg_type[2] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_voronoi(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                          unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double tolerance = 0.0;
+  if (args->arg_count >= 2 && args->args[1])
+    tolerance = *reinterpret_cast<double *>(args->args[1]);
+
+  GEOSGeometry *env_raw = nullptr;
+  GEOSGeomPtr env_holder;
+  if (args->arg_count >= 3 && args->args[2]) {
+    env_holder = mysql_to_geos(args->args[2], args->lengths[2]);
+    env_raw = env_holder.get();
+  }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr voronoi(GEOSVoronoiDiagram_r(ctx, geom.get(), env_raw,
+                                             tolerance, 0));
+  if (!voronoi) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(voronoi.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_voronoi_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_delaunay ----------------------------------------------------------
+// Creates Delaunay triangulation from geometry vertices.
+// stx_delaunay(geom [, tolerance [, edges_only]])
+
+static bool stx_delaunay_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_delaunay() requires 1-3 arguments (geom [, tolerance [, edges_only]])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count >= 2) args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count >= 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_delaunay(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                           unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double tolerance = 0.0;
+  if (args->arg_count >= 2 && args->args[1])
+    tolerance = *reinterpret_cast<double *>(args->args[1]);
+
+  int edges_only = 0;
+  if (args->arg_count >= 3 && args->args[2])
+    edges_only = (*reinterpret_cast<long long *>(args->args[2])) ? 1 : 0;
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr tri(GEOSDelaunayTriangulation_r(ctx, geom.get(), tolerance,
+                                               edges_only));
+  if (!tri) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(tri.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_delaunay_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -3146,6 +3326,15 @@ static const udf_entry udf_table[] = {
      stx_squaregrid_init, stx_squaregrid_deinit},
     {"stx_hexgrid", STRING_RESULT, (Udf_func_any)stx_hexgrid,
      stx_hexgrid_init, stx_hexgrid_deinit},
+    // GEOS-based functions
+    {"stx_makevalid", STRING_RESULT, (Udf_func_any)stx_makevalid,
+     stx_makevalid_init, stx_makevalid_deinit},
+    {"stx_linemerge", STRING_RESULT, (Udf_func_any)stx_linemerge,
+     stx_linemerge_init, stx_linemerge_deinit},
+    {"stx_voronoi", STRING_RESULT, (Udf_func_any)stx_voronoi,
+     stx_voronoi_init, stx_voronoi_deinit},
+    {"stx_delaunay", STRING_RESULT, (Udf_func_any)stx_delaunay,
+     stx_delaunay_init, stx_delaunay_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

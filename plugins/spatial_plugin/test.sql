@@ -1264,6 +1264,106 @@ CALL assert_eq_text(
   'GEOMCOLLECTION');
 
 -- =============================================================================
+-- GEOS: stx_makevalid
+-- =============================================================================
+
+-- Bowtie polygon (self-intersecting) -> repaired as two triangles
+CALL assert_eq_text(
+  'makevalid: bowtie polygon repaired to MULTIPOLYGON',
+  ST_GeometryType(STX_Makevalid(ST_GeomFromText('POLYGON((0 0, 10 10, 10 0, 0 10, 0 0))'))),
+  'MULTIPOLYGON');
+
+-- Already valid geometry passes through unchanged
+CALL assert_eq_text(
+  'makevalid: valid polygon unchanged',
+  ST_AsText(STX_Makevalid(ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))'))),
+  'POLYGON((0 0,10 0,10 10,0 10,0 0))');
+
+-- NULL input
+CALL assert_eq_text(
+  'makevalid: NULL input returns NULL',
+  STX_Makevalid(NULL),
+  NULL);
+
+-- =============================================================================
+-- GEOS: stx_linemerge
+-- =============================================================================
+
+-- Three connected lines merged into one
+CALL assert_eq_text(
+  'linemerge: connected lines merged',
+  ST_AsText(STX_Linemerge(ST_GeomFromText('MULTILINESTRING((0 0,1 1),(1 1,2 2),(2 2,3 3))'))),
+  'LINESTRING(0 0,1 1,2 2,3 3)');
+
+-- Reverse direction also merges
+CALL assert_eq_text(
+  'linemerge: reverse direction merged',
+  ST_AsText(STX_Linemerge(ST_GeomFromText('MULTILINESTRING((0 0,1 1),(1 1,2 2),(3 3,2 2))'))),
+  'LINESTRING(0 0,1 1,2 2,3 3)');
+
+-- Disconnected lines stay as MultiLineString
+CALL assert_eq_text(
+  'linemerge: disconnected lines stay multi',
+  ST_GeometryType(STX_Linemerge(ST_GeomFromText('MULTILINESTRING((0 0,1 1),(5 5,6 6))'))),
+  'MULTILINESTRING');
+
+-- NULL input
+CALL assert_eq_text(
+  'linemerge: NULL input returns NULL',
+  STX_Linemerge(NULL),
+  NULL);
+
+-- =============================================================================
+-- GEOS: stx_voronoi
+-- =============================================================================
+
+-- 3 points -> 3 Voronoi cells
+CALL assert_eq_int(
+  'voronoi: 3 points produce 3 cells',
+  ST_NumGeometries(STX_Voronoi(ST_GeomFromText('MULTIPOINT(0 0, 10 0, 5 10)'))),
+  3);
+
+-- Result is GEOMETRYCOLLECTION of POLYGONs
+CALL assert_eq_text(
+  'voronoi: result is GEOMCOLLECTION',
+  ST_GeometryType(STX_Voronoi(ST_GeomFromText('MULTIPOINT(0 0, 10 0, 5 10)'))),
+  'GEOMCOLLECTION');
+
+-- NULL input
+CALL assert_eq_text(
+  'voronoi: NULL input returns NULL',
+  STX_Voronoi(NULL),
+  NULL);
+
+-- =============================================================================
+-- GEOS: stx_delaunay
+-- =============================================================================
+
+-- 4 corner points -> triangulation
+CALL assert_eq_text(
+  'delaunay: result is GEOMCOLLECTION of triangles',
+  ST_GeometryType(STX_Delaunay(ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'))),
+  'GEOMCOLLECTION');
+
+-- 4 points -> 2 triangles
+CALL assert_eq_int(
+  'delaunay: 4 points produce 2 triangles',
+  ST_NumGeometries(STX_Delaunay(ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'))),
+  2);
+
+-- edges_only mode returns MULTILINESTRING
+CALL assert_eq_text(
+  'delaunay: edges_only returns MULTILINESTRING',
+  ST_GeometryType(STX_Delaunay(ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'), 0, 1)),
+  'MULTILINESTRING');
+
+-- NULL input
+CALL assert_eq_text(
+  'delaunay: NULL input returns NULL',
+  STX_Delaunay(NULL),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 
