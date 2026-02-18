@@ -1364,6 +1364,155 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- STX_Offsetcurve (Phase 4b)
+-- =============================================================================
+
+-- Basic offset left (positive distance)
+CALL assert_eq_text(
+  'offsetcurve: left offset returns LINESTRING',
+  ST_GeometryType(STX_Offsetcurve(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 1)),
+  'LINESTRING');
+
+-- Left offset: Y should be positive
+CALL assert_eq_double(
+  'offsetcurve: left offset Y = 1',
+  ST_Y(ST_PointN(STX_Offsetcurve(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 1), 1)),
+  1.0, 0.001);
+
+-- Right offset (negative distance): Y should be negative
+CALL assert_eq_double(
+  'offsetcurve: right offset Y = -2',
+  ST_Y(ST_PointN(STX_Offsetcurve(ST_GeomFromText('LINESTRING(0 0, 10 0)'), -2), 1)),
+  -2.0, 0.001);
+
+-- With custom quad_segs
+CALL assert_eq_text(
+  'offsetcurve: custom quad_segs returns LINESTRING',
+  ST_GeometryType(STX_Offsetcurve(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 1, 4)),
+  'LINESTRING');
+
+-- With join_style=2 (mitre)
+CALL assert_eq_text(
+  'offsetcurve: mitre join returns LINESTRING',
+  ST_GeometryType(STX_Offsetcurve(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 1, 8, 2)),
+  'LINESTRING');
+
+-- NULL input
+CALL assert_eq_text(
+  'offsetcurve: NULL geom returns NULL',
+  STX_Offsetcurve(NULL, 1),
+  NULL);
+
+-- NULL distance
+CALL assert_eq_text(
+  'offsetcurve: NULL distance returns NULL',
+  STX_Offsetcurve(ST_GeomFromText('LINESTRING(0 0, 10 0)'), NULL),
+  NULL);
+
+-- =============================================================================
+-- STX_Concavehull (Phase 4b)
+-- =============================================================================
+
+-- ratio=1 should give convex hull
+CALL assert_eq_text(
+  'concavehull: ratio=1 returns POLYGON (convex hull)',
+  ST_GeometryType(STX_Concavehull(
+    ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10, 5 5)'), 1.0)),
+  'POLYGON');
+
+-- ratio=1 with 4 points = convex hull = 4-corner polygon (5 ring points)
+CALL assert_eq_int(
+  'concavehull: ratio=1 convex hull has 5 ring points',
+  ST_NumPoints(ST_ExteriorRing(STX_Concavehull(
+    ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'), 1.0))),
+  5);
+
+-- ratio=0 should give maximum concavity (more vertices in result)
+CALL assert_eq_text(
+  'concavehull: ratio=0 returns POLYGON',
+  ST_GeometryType(STX_Concavehull(
+    ST_GeomFromText('MULTIPOINT(0 0, 5 0, 10 0, 10 5, 10 10, 5 10, 0 10, 0 5, 5 1)'), 0.0)),
+  'POLYGON');
+
+-- allow_holes parameter
+CALL assert_eq_text(
+  'concavehull: allow_holes returns POLYGON',
+  ST_GeometryType(STX_Concavehull(
+    ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10, 5 5)'), 0.5, 1)),
+  'POLYGON');
+
+-- Collinear points -> LINESTRING
+CALL assert_eq_text(
+  'concavehull: collinear points return LINESTRING',
+  ST_GeometryType(STX_Concavehull(
+    ST_GeomFromText('MULTIPOINT(0 0, 5 0, 10 0)'), 1.0)),
+  'LINESTRING');
+
+-- Single point -> POINT
+CALL assert_eq_text(
+  'concavehull: single point returns POINT',
+  ST_GeometryType(STX_Concavehull(
+    ST_GeomFromText('POINT(5 5)'), 1.0)),
+  'POINT');
+
+-- NULL input
+CALL assert_eq_text(
+  'concavehull: NULL returns NULL',
+  STX_Concavehull(NULL, 0.5),
+  NULL);
+
+-- =============================================================================
+-- STX_Snap (Phase 4b)
+-- =============================================================================
+
+-- Snap a point to a nearby line
+CALL assert_eq_text(
+  'snap: result is POINT',
+  ST_GeometryType(STX_Snap(
+    ST_GeomFromText('POINT(0.5 0.5)'),
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    1.0)),
+  'POINT');
+
+-- Snap polygon vertices to grid points
+CALL assert_eq_text(
+  'snap: snapped polygon is POLYGON',
+  ST_GeometryType(STX_Snap(
+    ST_GeomFromText('POLYGON((0.1 0.1, 9.9 0.1, 9.9 9.9, 0.1 9.9, 0.1 0.1))'),
+    ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'),
+    0.5)),
+  'POLYGON');
+
+-- Snap with tolerance=0 should return original
+CALL assert_eq_text(
+  'snap: tolerance=0 returns original WKT',
+  ST_AsText(STX_Snap(
+    ST_GeomFromText('POINT(1 1)'),
+    ST_GeomFromText('POINT(2 2)'),
+    0)),
+  'POINT(1 1)');
+
+-- Verify snapped coordinates
+CALL assert_eq_double(
+  'snap: vertex snaps to reference point X',
+  ST_X(STX_Snap(
+    ST_GeomFromText('POINT(0.1 0)'),
+    ST_GeomFromText('POINT(0 0)'),
+    0.5)),
+  0.0, 0.001);
+
+-- NULL input
+CALL assert_eq_text(
+  'snap: NULL geom1 returns NULL',
+  STX_Snap(NULL, ST_GeomFromText('POINT(0 0)'), 1.0),
+  NULL);
+
+CALL assert_eq_text(
+  'snap: NULL geom2 returns NULL',
+  STX_Snap(ST_GeomFromText('POINT(0 0)'), NULL, 1.0),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

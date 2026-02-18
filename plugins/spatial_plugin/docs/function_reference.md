@@ -70,6 +70,13 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Minimumboundingcircle](#stx_minimumboundingcircle) | GEOMETRY | 最小外接円 / Minimum bounding circle |
 | [STX_Squaregrid](#stx_squaregrid) | GEOMETRY | 矩形グリッド生成 / Square grid generation |
 | [STX_Hexgrid](#stx_hexgrid) | GEOMETRY | 六角形グリッド生成 / Hexagonal grid generation |
+| [STX_Makevalid](#stx_makevalid) | GEOMETRY | 不正ジオメトリ修復 / Repair invalid geometry (GEOS) |
+| [STX_Linemerge](#stx_linemerge) | GEOMETRY | ライン結合 / Merge connected LineStrings (GEOS) |
+| [STX_Voronoi](#stx_voronoi) | GEOMETRY | ボロノイ図 / Voronoi diagram (GEOS) |
+| [STX_Delaunay](#stx_delaunay) | GEOMETRY | ドロネー三角形分割 / Delaunay triangulation (GEOS) |
+| [STX_Offsetcurve](#stx_offsetcurve) | GEOMETRY | ラインの平行オフセット / Parallel offset line (GEOS) |
+| [STX_Concavehull](#stx_concavehull) | GEOMETRY | 凹包 / Concave hull (GEOS) |
+| [STX_Snap](#stx_snap) | GEOMETRY | 頂点スナッピング / Snap vertices to another geometry (GEOS) |
 
 ---
 
@@ -1695,14 +1702,295 @@ SELECT ST_GeometryType(STX_Hexgrid(5,
 
 ---
 
+## GEOS-based Functions / GEOS ベース関数
+
+以下の関数は [GEOS](https://libgeos.org/) ライブラリ（静的リンク）を使用して実装されている。
+The following functions are implemented using the [GEOS](https://libgeos.org/) library (statically linked).
+
+### STX_Makevalid
+
+不正なジオメトリを修復する。自己交差するポリゴン等を有効なジオメトリに変換する。
+Repairs an invalid geometry. Converts self-intersecting polygons etc. into valid geometries.
+
+```sql
+STX_Makevalid(geometry) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 修復対象のジオメトリ / Geometry to repair |
+
+#### 使用例 (Examples)
+
+```sql
+-- ボウタイ型ポリゴン（自己交差）を修復 / Repair a bowtie polygon
+SELECT ST_AsText(STX_Makevalid(
+  ST_GeomFromText('POLYGON((0 0, 10 10, 10 0, 0 10, 0 0))')));
+-- MULTIPOLYGON(((0 0,5 5,10 0,0 0)),((0 10,10 10,5 5,0 10)))
+
+-- 有効なジオメトリはそのまま返る / Valid geometry is returned unchanged
+SELECT ST_AsText(STX_Makevalid(
+  ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))')));
+-- POLYGON((0 0,10 0,10 10,0 10,0 0))
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_MakeValid()`
+- MySQL 標準: なし
+
+---
+
+### STX_Linemerge
+
+MultiLineString 内の接続する LineString を結合する。
+Merges connected LineStrings within a MultiLineString.
+
+```sql
+STX_Linemerge(geometry) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 結合対象の MultiLineString / MultiLineString to merge |
+
+#### 使用例 (Examples)
+
+```sql
+-- 3本の接続するラインを1本に結合 / Merge 3 connected lines into one
+SELECT ST_AsText(STX_Linemerge(ST_GeomFromText(
+  'MULTILINESTRING((0 0,1 1),(1 1,2 2),(2 2,3 3))')));
+-- LINESTRING(0 0,1 1,2 2,3 3)
+
+-- 接続しないラインは MultiLineString のまま / Disconnected lines stay as MultiLineString
+SELECT ST_GeometryType(STX_Linemerge(ST_GeomFromText(
+  'MULTILINESTRING((0 0,1 1),(5 5,6 6))')));
+-- MULTILINESTRING
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_LineMerge()`
+- MySQL 標準: なし
+
+---
+
+### STX_Voronoi
+
+入力ジオメトリの頂点からボロノイ図を生成する。
+Generates a Voronoi diagram from the vertices of the input geometry.
+
+```sql
+STX_Voronoi(geometry [, tolerance [, envelope]]) -> GEOMETRY (GeometryCollection)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 入力ジオメトリ（頂点を使用）/ Input geometry (vertices are used) |
+| tolerance | DOUBLE | スナップ許容値（デフォルト: 0.0）/ Snapping tolerance (default: 0.0) |
+| envelope | GEOMETRY | クリッピング範囲（デフォルト: 入力の envelope）/ Clipping envelope (default: input's envelope) |
+
+#### 使用例 (Examples)
+
+```sql
+-- 3点からボロノイ図を生成 / Voronoi diagram from 3 points
+SELECT ST_NumGeometries(STX_Voronoi(
+  ST_GeomFromText('MULTIPOINT(0 0, 10 0, 5 10)')));
+-- 3
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_VoronoiPolygons()`
+- MySQL 標準: なし
+
+---
+
+### STX_Delaunay
+
+入力ジオメトリの頂点からドロネー三角形分割を生成する。
+Generates a Delaunay triangulation from the vertices of the input geometry.
+
+```sql
+STX_Delaunay(geometry [, tolerance [, edges_only]]) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 入力ジオメトリ（頂点を使用）/ Input geometry (vertices are used) |
+| tolerance | DOUBLE | スナップ許容値（デフォルト: 0.0）/ Snapping tolerance (default: 0.0) |
+| edges_only | INTEGER | 1: 辺のみ（MULTILINESTRING）、0: 三角形（GeometryCollection）/ 1: edges only, 0: triangles (default) |
+
+#### 使用例 (Examples)
+
+```sql
+-- 4点からドロネー三角形を生成 / Delaunay triangulation from 4 points
+SELECT ST_NumGeometries(STX_Delaunay(
+  ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)')));
+-- 2
+
+-- 辺のみモード / Edges only mode
+SELECT ST_GeometryType(STX_Delaunay(
+  ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'), 0, 1));
+-- MULTILINESTRING
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_DelaunayTriangles()`
+- MySQL 標準: なし
+
+---
+
+### STX_Offsetcurve
+
+入力ラインから指定距離だけオフセットした平行線を生成する。
+Returns a line offset from the input line by the given distance.
+
+```sql
+STX_Offsetcurve(geometry, distance [, quad_segs [, join_style [, mitre_limit]]]) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 入力ライン（LineString）/ Input line |
+| distance | DOUBLE | オフセット距離。正=左側、負=右側 / Offset distance. Positive=left, negative=right |
+| quad_segs | INTEGER | 四分円あたりのセグメント数（デフォルト: 8）/ Segments per quarter circle (default: 8) |
+| join_style | INTEGER | 接合スタイル: 1=round(default), 2=mitre, 3=bevel / Join style |
+| mitre_limit | DOUBLE | マイター制限（デフォルト: 5.0）/ Mitre limit (default: 5.0) |
+
+#### 使用例 (Examples)
+
+```sql
+-- ラインの左側に距離1でオフセット / Offset line to the left by distance 1
+SELECT ST_AsText(STX_Offsetcurve(
+  ST_GeomFromText('LINESTRING(0 0, 10 0)'), 1));
+-- LINESTRING(10 1,0 1)
+
+-- 右側にオフセット（負の距離）/ Offset to the right (negative distance)
+SELECT ST_AsText(STX_Offsetcurve(
+  ST_GeomFromText('LINESTRING(0 0, 10 0)'), -2));
+-- LINESTRING(0 -2,10 -2)
+
+-- マイター接合でオフセット / Offset with mitre join
+SELECT ST_AsText(STX_Offsetcurve(
+  ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 1, 8, 2));
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_OffsetCurve()`
+- MySQL 標準: なし
+
+---
+
+### STX_Concavehull
+
+入力ジオメトリの頂点を包含する凹型ポリゴン（凹包）を生成する。
+Computes the concave hull of a geometry — a polygon that encloses all vertices.
+
+```sql
+STX_Concavehull(geometry, ratio [, allow_holes]) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 入力ジオメトリ / Input geometry |
+| ratio | DOUBLE | 凹度の制御。0.0=最大凹度、1.0=凸包 / Concavity control. 0.0=max concavity, 1.0=convex hull |
+| allow_holes | INTEGER | 1: 穴を許可、0: 穴なし（デフォルト）/ 1: allow holes, 0: no holes (default) |
+
+#### 戻り値 (Return Value)
+
+入力の形状に応じて POLYGON、LINESTRING（共線点の場合）、または POINT（同一点の場合）を返す。
+Returns POLYGON, LINESTRING (for collinear points), or POINT (for identical points) depending on input.
+
+#### 使用例 (Examples)
+
+```sql
+-- 凸包（ratio=1.0）/ Convex hull (ratio=1.0)
+SELECT ST_AsText(STX_Concavehull(
+  ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'), 1.0));
+-- POLYGON((0 0,0 10,10 10,10 0,0 0))
+
+-- 最大凹度（ratio=0.0）/ Maximum concavity (ratio=0.0)
+SELECT ST_AsText(STX_Concavehull(
+  ST_GeomFromText('MULTIPOINT(0 0, 5 0, 10 0, 10 5, 10 10, 5 10, 0 10, 0 5, 5 1)'), 0.0));
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_ConcaveHull()`
+- MySQL 標準: なし
+
+---
+
+### STX_Snap
+
+入力ジオメトリの頂点・セグメントを参照ジオメトリの頂点にスナップする。
+Snaps vertices and segments of the input geometry to vertices of the reference geometry.
+
+```sql
+STX_Snap(geometry1, geometry2, tolerance) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry1 | GEOMETRY | スナップ対象のジオメトリ / Geometry to snap |
+| geometry2 | GEOMETRY | スナップ先の参照ジオメトリ / Reference geometry to snap to |
+| tolerance | DOUBLE | スナップ距離の閾値 / Distance threshold for snapping |
+
+#### 備考 (Notes)
+
+- ヒューリスティクスで安全な位置を判定するため、すべてのスナップが適用されるとは限らない / Uses heuristics, so not all vertices may be snapped
+- オーバーレイ演算の前処理に有用 / Useful as preprocessing for overlay operations
+
+#### 使用例 (Examples)
+
+```sql
+-- ポリゴンの頂点をグリッド点にスナップ / Snap polygon vertices to grid points
+SELECT ST_AsText(STX_Snap(
+  ST_GeomFromText('POLYGON((0.1 0.1, 9.9 0.1, 9.9 9.9, 0.1 9.9, 0.1 0.1))'),
+  ST_GeomFromText('MULTIPOINT(0 0, 10 0, 10 10, 0 10)'),
+  0.5));
+-- POLYGON((0 0,10 0,10 10,0 10,0 0))
+
+-- 点を近くの点にスナップ / Snap a point to a nearby point
+SELECT ST_AsText(STX_Snap(
+  ST_GeomFromText('POINT(0.1 0)'),
+  ST_GeomFromText('POINT(0 0)'),
+  0.5));
+-- POINT(0 0)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Snap()`
+- MySQL 標準: なし
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全32関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 32 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全39関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 39 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -1750,6 +2038,13 @@ ORDER BY UDF_NAME;
 | STX_Snaptogrid                 | char            |
 | STX_Squaregrid                 | char            |
 | STX_Translate                  | char            |
+| STX_Makevalid                  | char            |
+| STX_Linemerge                  | char            |
+| STX_Voronoi                    | char            |
+| STX_Delaunay                   | char            |
+| STX_Offsetcurve                | char            |
+| STX_Concavehull                | char            |
+| STX_Snap                       | char            |
 +--------------------------------+-----------------+
 ```
 

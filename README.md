@@ -6,7 +6,7 @@ Motto: *"Imperfect beats unavailable."*
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports both Cartesian and Geographic (WGS84) coordinate systems.
 
-## Functions (32)
+## Functions (39)
 
 ### Spatial Measurement & Predicates
 
@@ -48,6 +48,18 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | `STX_Snaptogrid(geom, size [, size_y])` | Snap coordinates to grid |
 | `STX_Removerepeatedpoints(geom [, tol])` | Remove consecutive duplicate vertices |
 | `STX_Segmentize(geom, max_length)` | Split long segments by adding vertices |
+
+### GEOS-based Functions
+
+| Function | Description |
+|---|---|
+| `STX_Makevalid(geom)` | Repair invalid geometry |
+| `STX_Linemerge(geom)` | Merge connected LineStrings |
+| `STX_Voronoi(geom [, tolerance [, envelope]])` | Voronoi diagram |
+| `STX_Delaunay(geom [, tolerance [, edges_only]])` | Delaunay triangulation |
+| `STX_Offsetcurve(geom, dist [, quad_segs [, join [, mitre]]])` | Parallel offset line |
+| `STX_Concavehull(geom, ratio [, allow_holes])` | Concave hull |
+| `STX_Snap(g1, g2, tolerance)` | Snap vertices to another geometry |
 
 ### I/O Format Conversion
 
@@ -113,7 +125,7 @@ make install    # Copy .so to MySQL plugin directory
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-All 32 functions are registered automatically. No `CREATE FUNCTION` needed.
+All 39 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
 -- Verify
@@ -169,7 +181,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## Tests
 
 ```bash
-make test       # Run test suite (149 tests)
+make test       # Run test suite (201 tests)
 ```
 
 ## License

@@ -3243,6 +3243,168 @@ static void stx_delaunay_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_offsetcurve -------------------------------------------------------
+// Returns a line offset from the input line by the given distance.
+// Positive distance = left side, negative = right side.
+// stx_offsetcurve(geom, distance [, quad_segs [, join_style [, mitre_limit]]])
+// join_style: 1=round (default), 2=mitre, 3=bevel
+
+static bool stx_offsetcurve_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 5) {
+    strcpy(msg,
+           "stx_offsetcurve() requires 2-5 arguments "
+           "(geom, distance [, quad_segs [, join_style [, mitre_limit]]])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count >= 3) args->arg_type[2] = INT_RESULT;
+  if (args->arg_count >= 4) args->arg_type[3] = INT_RESULT;
+  if (args->arg_count >= 5) args->arg_type[4] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_offsetcurve(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  if (!args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double distance = *reinterpret_cast<double *>(args->args[1]);
+
+  int quad_segs = 8;  // GEOS default
+  if (args->arg_count >= 3 && args->args[2])
+    quad_segs = static_cast<int>(*reinterpret_cast<long long *>(args->args[2]));
+
+  int join_style = 1;  // GEOSBUF_JOIN_ROUND
+  if (args->arg_count >= 4 && args->args[3])
+    join_style =
+        static_cast<int>(*reinterpret_cast<long long *>(args->args[3]));
+
+  double mitre_limit = 5.0;  // GEOS default
+  if (args->arg_count >= 5 && args->args[4])
+    mitre_limit = *reinterpret_cast<double *>(args->args[4]);
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr offset(
+      GEOSOffsetCurve_r(ctx, geom.get(), distance, quad_segs, join_style,
+                         mitre_limit));
+  if (!offset) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(offset.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_offsetcurve_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_concavehull -------------------------------------------------------
+// Computes the concave hull of a geometry.
+// ratio: 0 = maximum concavity, 1 = convex hull.
+// stx_concavehull(geom, ratio [, allow_holes])
+
+static bool stx_concavehull_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_concavehull() requires 2-3 arguments "
+           "(geom, ratio [, allow_holes])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count >= 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_concavehull(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  if (!args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double ratio = *reinterpret_cast<double *>(args->args[1]);
+
+  unsigned int allow_holes = 0;
+  if (args->arg_count >= 3 && args->args[2])
+    allow_holes =
+        (*reinterpret_cast<long long *>(args->args[2])) ? 1 : 0;
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr hull(GEOSConcaveHull_r(ctx, geom.get(), ratio, allow_holes));
+  if (!hull) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(hull.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_concavehull_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_snap --------------------------------------------------------------
+// Snaps vertices of geom1 to vertices of geom2 within the given tolerance.
+// stx_snap(geom1, geom2, tolerance)
+
+static bool stx_snap_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 3) {
+    strcpy(msg, "stx_snap() requires 3 arguments (geom1, geom2, tolerance)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  args->arg_type[2] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_snap(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                       unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1] || !args->args[2]) {
+    *is_null = 1;
+    return nullptr;
+  }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom1 = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom1) { *error = 1; return nullptr; }
+
+  auto geom2 = mysql_to_geos(args->args[1], args->lengths[1]);
+  if (!geom2) { *error = 1; return nullptr; }
+
+  double tolerance = *reinterpret_cast<double *>(args->args[2]);
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr snapped(GEOSSnap_r(ctx, geom1.get(), geom2.get(), tolerance));
+  if (!snapped) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(snapped.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_snap_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -3335,6 +3497,12 @@ static const udf_entry udf_table[] = {
      stx_voronoi_init, stx_voronoi_deinit},
     {"stx_delaunay", STRING_RESULT, (Udf_func_any)stx_delaunay,
      stx_delaunay_init, stx_delaunay_deinit},
+    {"stx_offsetcurve", STRING_RESULT, (Udf_func_any)stx_offsetcurve,
+     stx_offsetcurve_init, stx_offsetcurve_deinit},
+    {"stx_concavehull", STRING_RESULT, (Udf_func_any)stx_concavehull,
+     stx_concavehull_init, stx_concavehull_deinit},
+    {"stx_snap", STRING_RESULT, (Udf_func_any)stx_snap, stx_snap_init,
+     stx_snap_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

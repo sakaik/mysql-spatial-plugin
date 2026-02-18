@@ -6,7 +6,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 距離クエリ、空間関係判定（DE-9IM）、座標変換、入出力フォーマット変換などの GIS 関数を提供します。Cartesian（平面直交座標系）と Geographic（WGS84 等の地理座標系）の両方に対応しています。
 
-## 関数一覧（32関数）
+## 関数一覧（39関数）
 
 ### 空間計測・述語
 
@@ -48,6 +48,18 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Snaptogrid(geom, size [, size_y])` | 座標をグリッドにスナップ |
 | `STX_Removerepeatedpoints(geom [, tol])` | 連続する重複頂点を除去 |
 | `STX_Segmentize(geom, max_length)` | 長い辺を分割（頂点追加） |
+
+### GEOS ベース関数
+
+| 関数 | 説明 |
+|---|---|
+| `STX_Makevalid(geom)` | 不正ジオメトリの修復 |
+| `STX_Linemerge(geom)` | 接続する LineString の結合 |
+| `STX_Voronoi(geom [, tolerance [, envelope]])` | ボロノイ図 |
+| `STX_Delaunay(geom [, tolerance [, edges_only]])` | ドロネー三角形分割 |
+| `STX_Offsetcurve(geom, dist [, quad_segs [, join [, mitre]]])` | ラインの平行オフセット |
+| `STX_Concavehull(geom, ratio [, allow_holes])` | 凹包 |
+| `STX_Snap(g1, g2, tolerance)` | 頂点を別ジオメトリにスナップ |
 
 ### 入出力フォーマット変換
 
@@ -113,7 +125,7 @@ make install    # .so を MySQL プラグインディレクトリにコピー
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-全32関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
+全39関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
 -- 確認
@@ -169,7 +181,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## テスト
 
 ```bash
-make test       # テストスイートを実行（149テスト）
+make test       # テストスイートを実行（201テスト）
 ```
 
 ## ライセンス
