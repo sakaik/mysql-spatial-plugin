@@ -1,6 +1,8 @@
 # STX Spatial Plugin for MySQL
 
 MySQL plugin that adds spatial functions (`STX_*`) powered by [Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/).
+Our approach: implement functions broadly first, then refine through thorough testing.
+Motto: *"Imperfect beats unavailable."*
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports both Cartesian and Geographic (WGS84) coordinate systems.
 

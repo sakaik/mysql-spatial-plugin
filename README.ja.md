@@ -1,6 +1,8 @@
 # STX Spatial Plugin for MySQL
 
 MySQL に不足している空間関数を追加するプラグインです。[Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/) を利用して実装しています。
+とりあえず粗々でも実装関数を増やし、その後にしっかりとテスト、修正をしていく方針です。
+キャッチコピーは「ないよりもあるほうがいい」。
 
 距離クエリ、空間関係判定（DE-9IM）、座標変換、入出力フォーマット変換などの GIS 関数を提供します。Cartesian（平面直交座標系）と Geographic（WGS84 等の地理座標系）の両方に対応しています。
 
