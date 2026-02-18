@@ -6,7 +6,7 @@ Motto: *"Imperfect beats unavailable."*
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports both Cartesian and Geographic (WGS84) coordinate systems.
 
-## Functions (39)
+## Functions (43)
 
 ### Spatial Measurement & Predicates
 
@@ -60,6 +60,10 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | `STX_Offsetcurve(geom, dist [, quad_segs [, join [, mitre]]])` | Parallel offset line |
 | `STX_Concavehull(geom, ratio [, allow_holes])` | Concave hull |
 | `STX_Snap(g1, g2, tolerance)` | Snap vertices to another geometry |
+| `STX_Polygonize(geom)` | Create polygons from linework |
+| `STX_Buildarea(geom)` | Create area from linework (inner rings become holes) |
+| `STX_Sharedpaths(g1, g2)` | Shared paths between two lineal geometries |
+| `STX_Node(geom)` | Fully node a set of linestrings |
 
 ### I/O Format Conversion
 
@@ -125,7 +129,7 @@ make install    # Copy .so to MySQL plugin directory
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-All 39 functions are registered automatically. No `CREATE FUNCTION` needed.
+All 43 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
 -- Verify
@@ -181,7 +185,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## Tests
 
 ```bash
-make test       # Run test suite (201 tests)
+make test       # Run test suite (220 tests)
 ```
 
 ## License

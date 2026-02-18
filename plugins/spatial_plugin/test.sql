@@ -1513,6 +1513,156 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- STX_Polygonize (Phase 4c)
+-- =============================================================================
+
+-- Square ring -> 1 polygon
+CALL assert_eq_int(
+  'polygonize: square ring produces 1 polygon',
+  ST_NumGeometries(STX_Polygonize(ST_GeomFromText(
+    'MULTILINESTRING((0 0,10 0),(10 0,10 10),(10 10,0 10),(0 10,0 0))'))),
+  1);
+
+-- Result type is GEOMCOLLECTION
+CALL assert_eq_text(
+  'polygonize: result is GEOMCOLLECTION',
+  ST_GeometryType(STX_Polygonize(ST_GeomFromText(
+    'MULTILINESTRING((0 0,10 0),(10 0,10 10),(10 10,0 10),(0 10,0 0))'))),
+  'GEOMCOLLECTION');
+
+-- Inner polygon is correct area
+CALL assert_eq_double(
+  'polygonize: polygon area is 100',
+  ST_Area(ST_GeometryN(STX_Polygonize(ST_GeomFromText(
+    'MULTILINESTRING((0 0,10 0),(10 0,10 10),(10 10,0 10),(0 10,0 0))')), 1)),
+  100.0, 0.001);
+
+-- Two adjacent squares -> 2 polygons
+CALL assert_eq_int(
+  'polygonize: two adjacent squares produce 2 polygons',
+  ST_NumGeometries(STX_Polygonize(ST_GeomFromText(
+    'MULTILINESTRING((0 0,10 0),(10 0,10 10),(10 10,0 10),(0 10,0 0),(10 0,20 0),(20 0,20 10),(20 10,10 10))'))),
+  2);
+
+-- NULL input
+CALL assert_eq_text(
+  'polygonize: NULL returns NULL',
+  STX_Polygonize(NULL),
+  NULL);
+
+-- =============================================================================
+-- STX_Buildarea (Phase 4c)
+-- =============================================================================
+
+-- Square ring -> POLYGON
+CALL assert_eq_text(
+  'buildarea: square ring produces POLYGON',
+  ST_GeometryType(STX_Buildarea(ST_GeomFromText(
+    'MULTILINESTRING((0 0,10 0),(10 0,10 10),(10 10,0 10),(0 10,0 0))'))),
+  'POLYGON');
+
+-- Area is correct
+CALL assert_eq_double(
+  'buildarea: area is 100',
+  ST_Area(STX_Buildarea(ST_GeomFromText(
+    'MULTILINESTRING((0 0,10 0),(10 0,10 10),(10 10,0 10),(0 10,0 0))'))),
+  100.0, 0.001);
+
+-- Outer + inner ring -> polygon with hole
+CALL assert_eq_double(
+  'buildarea: outer+inner ring area = outer - inner',
+  ST_Area(STX_Buildarea(ST_GeomFromText(
+    'MULTILINESTRING((0 0,10 0,10 10,0 10,0 0),(2 2,8 2,8 8,2 8,2 2))'))),
+  64.0, 0.001);
+
+-- NULL input
+CALL assert_eq_text(
+  'buildarea: NULL returns NULL',
+  STX_Buildarea(NULL),
+  NULL);
+
+-- =============================================================================
+-- STX_Sharedpaths (Phase 4c)
+-- =============================================================================
+
+-- Same direction shared segment
+CALL assert_eq_text(
+  'sharedpaths: result is GEOMCOLLECTION',
+  ST_GeometryType(STX_Sharedpaths(
+    ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'),
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'))),
+  'GEOMCOLLECTION');
+
+-- Has 2 sub-collections (same-direction, opposite-direction)
+CALL assert_eq_int(
+  'sharedpaths: result has 2 sub-collections',
+  ST_NumGeometries(STX_Sharedpaths(
+    ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'),
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'))),
+  2);
+
+-- Same direction: shared segment should be non-empty
+CALL assert_eq_int(
+  'sharedpaths: same-direction path count',
+  ST_NumGeometries(ST_GeometryN(STX_Sharedpaths(
+    ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'),
+    ST_GeomFromText('LINESTRING(0 0, 10 0)')), 1)),
+  1);
+
+-- No shared paths -> empty sub-collections
+CALL assert_eq_int(
+  'sharedpaths: disjoint lines have 0 same-direction paths',
+  ST_NumGeometries(ST_GeometryN(STX_Sharedpaths(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    ST_GeomFromText('LINESTRING(0 5, 10 5)')), 1)),
+  0);
+
+-- Opposite direction shared path
+CALL assert_eq_int(
+  'sharedpaths: opposite-direction shared path found',
+  ST_NumGeometries(ST_GeometryN(STX_Sharedpaths(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    ST_GeomFromText('LINESTRING(10 0, 0 0)')), 2)),
+  1);
+
+-- NULL input
+CALL assert_eq_text(
+  'sharedpaths: NULL returns NULL',
+  STX_Sharedpaths(NULL, ST_GeomFromText('LINESTRING(0 0, 10 0)')),
+  NULL);
+
+-- =============================================================================
+-- STX_Node (Phase 4c)
+-- =============================================================================
+
+-- Two crossing lines -> 5 segments (X shape split at intersection)
+CALL assert_eq_text(
+  'node: result is MULTILINESTRING',
+  ST_GeometryType(STX_Node(ST_GeomFromText(
+    'MULTILINESTRING((0 0, 10 10), (0 10, 10 0))'))),
+  'MULTILINESTRING');
+
+-- Crossing at midpoint creates 4 segments
+CALL assert_eq_int(
+  'node: X crossing produces 4 segments',
+  ST_NumGeometries(STX_Node(ST_GeomFromText(
+    'MULTILINESTRING((0 0, 10 10), (0 10, 10 0))'))),
+  4);
+
+-- Non-crossing lines remain unchanged
+CALL assert_eq_int(
+  'node: parallel lines stay as 2',
+  ST_NumGeometries(STX_Node(ST_GeomFromText(
+    'MULTILINESTRING((0 0, 10 0), (0 5, 10 5))'))),
+  2);
+
+-- NULL input
+CALL assert_eq_text(
+  'node: NULL returns NULL',
+  STX_Node(NULL),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

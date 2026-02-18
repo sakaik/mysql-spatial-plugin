@@ -3405,6 +3405,214 @@ static void stx_snap_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_polygonize --------------------------------------------------------
+// Creates polygons from a set of linework (GeometryCollection of LineStrings).
+// stx_polygonize(geom)
+
+static bool stx_polygonize_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_polygonize() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_polygonize(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+
+  // Extract individual geometries from input for GEOSPolygonize_r
+  int n = GEOSGetNumGeometries_r(ctx, geom.get());
+  if (n < 0) { *error = 1; return nullptr; }
+
+  std::vector<const GEOSGeometry *> geoms;
+  if (n == 0) {
+    // Single geometry (not a collection) — pass it directly
+    geoms.push_back(geom.get());
+  } else {
+    geoms.reserve(n);
+    for (int i = 0; i < n; ++i)
+      geoms.push_back(GEOSGetGeometryN_r(ctx, geom.get(), i));
+  }
+
+  GEOSGeomPtr poly(
+      GEOSPolygonize_r(ctx, geoms.data(),
+                        static_cast<unsigned int>(geoms.size())));
+  if (!poly) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(poly.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_polygonize_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_buildarea ---------------------------------------------------------
+// Creates an areal geometry from linework. Interior rings become holes.
+// stx_buildarea(geom)
+
+static bool stx_buildarea_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_buildarea() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_buildarea(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                            unsigned long *length, char *is_null,
+                            char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr area(GEOSBuildArea_r(ctx, geom.get()));
+  if (!area) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(area.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_buildarea_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_sharedpaths -------------------------------------------------------
+// Returns shared paths between two lineal geometries.
+// Result is GeometryCollection: [0]=same-direction paths, [1]=opposite-direction.
+// stx_sharedpaths(geom1, geom2)
+
+static bool stx_sharedpaths_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_sharedpaths() requires 2 arguments (geom1, geom2)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_sharedpaths(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                               unsigned long *length, char *is_null,
+                               char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom1 = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom1) { *error = 1; return nullptr; }
+
+  auto geom2 = mysql_to_geos(args->args[1], args->lengths[1]);
+  if (!geom2) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr paths(GEOSSharedPaths_r(ctx, geom1.get(), geom2.get()));
+  if (!paths) { *error = 1; return nullptr; }
+
+  // GEOS returns GeometryCollection(MultiLineString, MultiLineString).
+  // MySQL rejects empty MultiLineStrings in WKB, so replace them with
+  // empty GeometryCollections for compatibility.
+  int n = GEOSGetNumGeometries_r(ctx, paths.get());
+  std::vector<GEOSGeometry *> fixed;
+  std::vector<GEOSGeomPtr> owned;  // prevent leaks
+  bool needs_fix = false;
+  for (int i = 0; i < n; ++i) {
+    const GEOSGeometry *sub = GEOSGetGeometryN_r(ctx, paths.get(), i);
+    if (GEOSisEmpty_r(ctx, sub)) {
+      needs_fix = true;
+      break;
+    }
+  }
+  if (needs_fix) {
+    for (int i = 0; i < n; ++i) {
+      const GEOSGeometry *sub = GEOSGetGeometryN_r(ctx, paths.get(), i);
+      if (GEOSisEmpty_r(ctx, sub)) {
+        owned.emplace_back(GEOSGeom_createEmptyCollection_r(
+            ctx, GEOS_GEOMETRYCOLLECTION));
+        fixed.push_back(owned.back().get());
+      } else {
+        owned.emplace_back(GEOSGeom_clone_r(ctx, sub));
+        fixed.push_back(owned.back().get());
+      }
+    }
+    // Transfer ownership of sub-geometries to the new collection
+    std::vector<GEOSGeometry *> transfer;
+    for (auto &p : owned) transfer.push_back(p.release());
+    paths.reset(GEOSGeom_createCollection_r(
+        ctx, GEOS_GEOMETRYCOLLECTION, transfer.data(),
+        static_cast<unsigned int>(transfer.size())));
+    if (!paths) { *error = 1; return nullptr; }
+  }
+
+  auto wkb = geos_to_mysql(paths.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_sharedpaths_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_node --------------------------------------------------------------
+// Fully nodes a set of linestrings, adding intersection points.
+// stx_node(geom)
+
+static bool stx_node_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_node() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_node(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                       unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr noded(GEOSNode_r(ctx, geom.get()));
+  if (!noded) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(noded.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_node_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -3503,6 +3711,14 @@ static const udf_entry udf_table[] = {
      stx_concavehull_init, stx_concavehull_deinit},
     {"stx_snap", STRING_RESULT, (Udf_func_any)stx_snap, stx_snap_init,
      stx_snap_deinit},
+    {"stx_polygonize", STRING_RESULT, (Udf_func_any)stx_polygonize,
+     stx_polygonize_init, stx_polygonize_deinit},
+    {"stx_buildarea", STRING_RESULT, (Udf_func_any)stx_buildarea,
+     stx_buildarea_init, stx_buildarea_deinit},
+    {"stx_sharedpaths", STRING_RESULT, (Udf_func_any)stx_sharedpaths,
+     stx_sharedpaths_init, stx_sharedpaths_deinit},
+    {"stx_node", STRING_RESULT, (Udf_func_any)stx_node, stx_node_init,
+     stx_node_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

@@ -77,6 +77,10 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Offsetcurve](#stx_offsetcurve) | GEOMETRY | ラインの平行オフセット / Parallel offset line (GEOS) |
 | [STX_Concavehull](#stx_concavehull) | GEOMETRY | 凹包 / Concave hull (GEOS) |
 | [STX_Snap](#stx_snap) | GEOMETRY | 頂点スナッピング / Snap vertices to another geometry (GEOS) |
+| [STX_Polygonize](#stx_polygonize) | GEOMETRY | ラインからポリゴン構築 / Create polygons from linework (GEOS) |
+| [STX_Buildarea](#stx_buildarea) | GEOMETRY | ラインから面構築 / Create area from linework (GEOS) |
+| [STX_Sharedpaths](#stx_sharedpaths) | GEOMETRY | 共有パス抽出 / Shared paths between lineal geometries (GEOS) |
+| [STX_Node](#stx_node) | GEOMETRY | ラインのノード化 / Node a set of linestrings (GEOS) |
 
 ---
 
@@ -1983,14 +1987,160 @@ SELECT ST_AsText(STX_Snap(
 
 ---
 
+### STX_Polygonize
+
+ラインワーク（LineString の集まり）からポリゴンを構築する。
+Creates polygons from a set of linework (LineStrings forming closed rings).
+
+```sql
+STX_Polygonize(geometry) -> GEOMETRY (GeometryCollection)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | ラインワーク（MultiLineString / GeometryCollection）/ Linework (MultiLineString / GeometryCollection) |
+
+#### 備考 (Notes)
+
+- 入力ラインは正しくノード化されている必要がある（`STX_Node` で前処理推奨） / Input lines must be properly noded (preprocess with `STX_Node`)
+- 結果は GeometryCollection of Polygons / Result is a GeometryCollection of Polygons
+
+#### 使用例 (Examples)
+
+```sql
+-- 4本のラインから正方形ポリゴンを構築 / Build square polygon from 4 lines
+SELECT ST_NumGeometries(STX_Polygonize(ST_GeomFromText(
+  'MULTILINESTRING((0 0,10 0),(10 0,10 10),(10 10,0 10),(0 10,0 0))')));
+-- 1
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Polygonize()`
+- MySQL 標準: なし
+
+---
+
+### STX_Buildarea
+
+ラインワークから面的ジオメトリを構築する。内部リングは穴になる。
+Creates an areal geometry from linework. Interior rings become holes.
+
+```sql
+STX_Buildarea(geometry) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | ラインワーク / Linework (LineString, MultiLineString, etc.) |
+
+#### 備考 (Notes)
+
+- `STX_Polygonize` と異なり、内部リングを穴として処理する / Unlike `STX_Polygonize`, processes interior rings as holes
+- 入力は正しくノード化されている必要がある / Input must be properly noded
+
+#### 使用例 (Examples)
+
+```sql
+-- 外側+内側リングから穴あきポリゴンを構築 / Build polygon with hole
+SELECT ST_Area(STX_Buildarea(ST_GeomFromText(
+  'MULTILINESTRING((0 0,10 0,10 10,0 10,0 0),(2 2,8 2,8 8,2 8,2 2))')));
+-- 64 (100 - 36)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_BuildArea()`
+- MySQL 標準: なし
+
+---
+
+### STX_Sharedpaths
+
+2つの線形ジオメトリの共有パス（重複する部分）を抽出する。
+Returns shared paths between two lineal geometries.
+
+```sql
+STX_Sharedpaths(geometry1, geometry2) -> GEOMETRY (GeometryCollection)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry1 | GEOMETRY | 線形ジオメトリ / Lineal geometry (LineString / MultiLineString) |
+| geometry2 | GEOMETRY | 線形ジオメトリ / Lineal geometry (LineString / MultiLineString) |
+
+#### 戻り値 (Return Value)
+
+GeometryCollection を返す。第1要素は同方向の共有パス、第2要素は逆方向の共有パス。
+Returns a GeometryCollection: element [1] = same-direction shared paths, element [2] = opposite-direction shared paths.
+
+#### 使用例 (Examples)
+
+```sql
+-- 同方向の共有パス / Same-direction shared path
+SELECT ST_AsText(STX_Sharedpaths(
+  ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'),
+  ST_GeomFromText('LINESTRING(0 0, 10 0)')));
+-- GEOMETRYCOLLECTION(MULTILINESTRING((0 0,10 0)),GEOMETRYCOLLECTION EMPTY)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_SharedPaths()`
+- MySQL 標準: なし
+
+---
+
+### STX_Node
+
+ラインストリングの集まりを完全にノード化する。交差点にノードを追加し、ラインを分割する。
+Fully nodes a set of linestrings by adding intersection points and splitting lines.
+
+```sql
+STX_Node(geometry) -> GEOMETRY (MultiLineString)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | ラインの集まり / Collection of linestrings |
+
+#### 備考 (Notes)
+
+- `STX_Polygonize` の前処理に最適 / Ideal preprocessing for `STX_Polygonize`
+- 既存のノードは保持し、最小限の新ノードを追加 / Preserves existing nodes, adds minimal new ones
+
+#### 使用例 (Examples)
+
+```sql
+-- X 字交差する2本のラインをノード化 / Node two crossing lines
+SELECT ST_NumGeometries(STX_Node(ST_GeomFromText(
+  'MULTILINESTRING((0 0, 10 10), (0 10, 10 0))')));
+-- 4 (each line split at intersection point)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Node()`
+- MySQL 標準: なし
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全39関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 39 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全43関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 43 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -2045,6 +2195,10 @@ ORDER BY UDF_NAME;
 | STX_Offsetcurve                | char            |
 | STX_Concavehull                | char            |
 | STX_Snap                       | char            |
+| STX_Polygonize                 | char            |
+| STX_Buildarea                  | char            |
+| STX_Sharedpaths                | char            |
+| STX_Node                       | char            |
 +--------------------------------+-----------------+
 ```
 

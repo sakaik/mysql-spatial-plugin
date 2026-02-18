@@ -6,7 +6,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 距離クエリ、空間関係判定（DE-9IM）、座標変換、入出力フォーマット変換などの GIS 関数を提供します。Cartesian（平面直交座標系）と Geographic（WGS84 等の地理座標系）の両方に対応しています。
 
-## 関数一覧（39関数）
+## 関数一覧（43関数）
 
 ### 空間計測・述語
 
@@ -60,6 +60,10 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Offsetcurve(geom, dist [, quad_segs [, join [, mitre]]])` | ラインの平行オフセット |
 | `STX_Concavehull(geom, ratio [, allow_holes])` | 凹包 |
 | `STX_Snap(g1, g2, tolerance)` | 頂点を別ジオメトリにスナップ |
+| `STX_Polygonize(geom)` | ラインワークからポリゴン構築 |
+| `STX_Buildarea(geom)` | ラインワークから面構築（内部リングは穴） |
+| `STX_Sharedpaths(g1, g2)` | 2つの線形ジオメトリの共有パス抽出 |
+| `STX_Node(geom)` | ラインのノード化（交差点で分割） |
 
 ### 入出力フォーマット変換
 
@@ -125,7 +129,7 @@ make install    # .so を MySQL プラグインディレクトリにコピー
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-全39関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
+全43関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
 -- 確認
@@ -181,7 +185,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## テスト
 
 ```bash
-make test       # テストスイートを実行（201テスト）
+make test       # テストスイートを実行（220テスト）
 ```
 
 ## ライセンス
