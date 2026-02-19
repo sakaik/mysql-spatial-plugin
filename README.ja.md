@@ -28,18 +28,18 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | 関数 | 説明 |
 |---|---|
 | `STX_Project(point, dist, azimuth)` | 指定距離・方位角で点を投影 |
-| `STX_Linelocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） |
-| `STX_Linesubstring(line, start, end)` | ラインの一部を抽出 |
-| `STX_Closestpoint(point, geom)` | ジオメトリ上の最近接点を返す |
-| `STX_Shortestline(g1, g2)` | 2つのジオメトリ間の最短線分を返す |
-| `STX_Pointonsurface(geom)` | ポリゴン内部の点を返す |
+| `STX_LineLocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） |
+| `STX_LineSubstring(line, start, end)` | ラインの一部を抽出 |
+| `STX_ClosestPoint(point, geom)` | ジオメトリ上の最近接点を返す |
+| `STX_ShortestLine(g1, g2)` | 2つのジオメトリ間の最短線分を返す |
+| `STX_PointonSurface(geom)` | ポリゴン内部の点を返す |
 | `STX_Points(geom)` | 全頂点を MultiPoint として抽出 |
-| `STX_Makepoint(coord1, coord2 [, srid])` | 座標から POINT を構築（軸順序は SRS 定義に従う） |
-| `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 |
-| `STX_Makepolygon(ring [, inner_rings])` | LineString から Polygon を構築 |
-| `STX_Generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
-| `STX_Minimumboundingcircle(geom [, segs])` | 最小外接円（Polygon として返却） |
-| `STX_Squaregrid(size, geom)` | バウンディングボックスを覆う矩形グリッド |
+| `STX_MakePoint(coord1, coord2 [, srid])` | 座標から POINT を構築（軸順序は SRS 定義に従う） |
+| `STX_MakeLine(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 |
+| `STX_MakePolygon(ring [, inner_rings])` | LineString から Polygon を構築 |
+| `STX_GeneratePoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
+| `STX_MinimumBoundingCircle(geom [, segs])` | 最小外接円（Polygon として返却） |
+| `STX_SquareGrid(size, geom)` | バウンディングボックスを覆う矩形グリッド |
 | `STX_Hexgrid(size, geom)` | バウンディングボックスを覆う六角形グリッド |
 
 ### 座標変換
