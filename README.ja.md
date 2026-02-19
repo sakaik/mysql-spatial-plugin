@@ -1,6 +1,6 @@
 # STX Spatial Plugin for MySQL
 
-MySQL に不足している空間関数を追加するプラグインです。[Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/) を利用して実装しています。
+MySQL に不足している空間関数を追加するプラグインです。[Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/) と [GEOS](https://libgeos.org/) を利用して実装しています。
 とりあえず粗々でも実装関数を増やし、その後にしっかりとテスト、修正をしていく方針です。
 キャッチコピーは「ないよりもあるほうがいい」。
 

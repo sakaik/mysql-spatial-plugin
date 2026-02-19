@@ -1,6 +1,6 @@
 # STX Spatial Plugin for MySQL
 
-MySQL plugin that adds spatial functions (`STX_*`) powered by [Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/).
+MySQL plugin that adds spatial functions (`STX_*`) powered by [Boost.Geometry](https://www.boost.org/doc/libs/release/libs/geometry/) and [GEOS](https://libgeos.org/).
 Our approach: implement functions broadly first, then refine through thorough testing.
 Motto: *"Imperfect beats unavailable."*
 

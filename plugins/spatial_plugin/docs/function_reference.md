@@ -5,8 +5,8 @@ A specification of spatial functions provided by the `spatial_plugin` plugin for
 
 ## 概要 (Overview)
 
-`STX_` プレフィックスの関数群は、MySQL に不足している空間演算機能を boost::geometry ライブラリを用いて実装したものである。`INSTALL PLUGIN` 時に全関数が自動登録される。
-The `STX_`-prefixed functions implement spatial operations missing from MySQL, powered by the boost::geometry library. All functions are automatically registered upon `INSTALL PLUGIN`.
+`STX_` プレフィックスの関数群は、MySQL に不足している空間演算機能を boost::geometry ライブラリおよび GEOS ライブラリを用いて実装したものである。`INSTALL PLUGIN` 時に全関数が自動登録される。
+The `STX_`-prefixed functions implement spatial operations missing from MySQL, powered by the boost::geometry and GEOS libraries. All functions are automatically registered upon `INSTALL PLUGIN`.
 
 ### 座標系サポート (Coordinate System Support)
 
