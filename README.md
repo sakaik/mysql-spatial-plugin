@@ -34,7 +34,7 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | `STX_Shortestline(g1, g2)` | Shortest line between two geometries |
 | `STX_Pointonsurface(geom)` | Interior point of polygon |
 | `STX_Points(geom)` | Extract all vertices as MultiPoint |
-| `STX_Makepoint(x, y [, srid])` | Create a point from coordinates |
+| `STX_Makepoint(coord1, coord2 [, srid])` | Create a point from coordinates (axis order follows SRS definition) |
 | `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Create LineString from points |
 | `STX_Makepolygon(ring [, inner_rings])` | Create Polygon from LineString |
 | `STX_Generatepoints(geom, n [, seed])` | Generate random points inside polygon |

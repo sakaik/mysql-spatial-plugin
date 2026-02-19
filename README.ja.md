@@ -34,7 +34,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Shortestline(g1, g2)` | 2つのジオメトリ間の最短線分を返す |
 | `STX_Pointonsurface(geom)` | ポリゴン内部の点を返す |
 | `STX_Points(geom)` | 全頂点を MultiPoint として抽出 |
-| `STX_Makepoint(x, y [, srid])` | 座標から POINT を構築 |
+| `STX_Makepoint(coord1, coord2 [, srid])` | 座標から POINT を構築（軸順序は SRS 定義に従う） |
 | `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 |
 | `STX_Makepolygon(ring [, inner_rings])` | LineString から Polygon を構築 |
 | `STX_Generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |

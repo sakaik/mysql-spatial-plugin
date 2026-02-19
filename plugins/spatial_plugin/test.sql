@@ -733,8 +733,25 @@ CALL assert_eq_int(
 
 CALL assert_eq_int(
   'makepoint: explicit SRID 4326',
-  ST_SRID(stx_makepoint(139.7, 35.6, 4326)),
+  ST_SRID(stx_makepoint(35.6, 139.7, 4326)),
   4326);
+
+-- Geographic SRID: args follow SRS axis order (lat, lon)
+CALL assert_eq_double(
+  'makepoint: SRID 4326 latitude (arg1=35.6)',
+  ST_Latitude(stx_makepoint(35.6, 139.7, 4326)),
+  35.6, 0.0001);
+
+CALL assert_eq_double(
+  'makepoint: SRID 4326 longitude (arg2=139.7)',
+  ST_Longitude(stx_makepoint(35.6, 139.7, 4326)),
+  139.7, 0.0001);
+
+-- Cartesian SRID 0: args are (x, y) as-is
+CALL assert_eq_text(
+  'makepoint: SRID 0 preserves (x, y) order',
+  ST_AsText(stx_makepoint(10, 20)),
+  'POINT(10 20)');
 
 CALL assert_eq_text(
   'makepoint: NULL x returns NULL',

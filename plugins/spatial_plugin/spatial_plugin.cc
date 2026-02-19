@@ -1558,12 +1558,16 @@ static char *stx_makepoint(UDF_INIT *, UDF_ARGS *args, char *result,
                             unsigned long *length, char *is_null, char *) {
   if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
   if (args->arg_count == 3 && !args->args[2]) { *is_null = 1; return nullptr; }
-  double x = *reinterpret_cast<double *>(args->args[0]);
-  double y = *reinterpret_cast<double *>(args->args[1]);
+  double arg1 = *reinterpret_cast<double *>(args->args[0]);
+  double arg2 = *reinterpret_cast<double *>(args->args[1]);
   uint32_t srid = 0;
   if (args->arg_count == 3)
     srid = static_cast<uint32_t>(*reinterpret_cast<long long *>(args->args[2]));
-  auto wkb = write_point_wkb(srid, x, y);
+  // For geographic SRIDs, arguments follow SRS axis order (lat, lon),
+  // but internal WKB stores (lon, lat). Swap accordingly.
+  double wkb_x = is_geographic_srid(srid) ? arg2 : arg1;
+  double wkb_y = is_geographic_srid(srid) ? arg1 : arg2;
+  auto wkb = write_point_wkb(srid, wkb_x, wkb_y);
   *length = static_cast<unsigned long>(wkb.size());
   std::memcpy(result, wkb.data(), wkb.size());
   return result;

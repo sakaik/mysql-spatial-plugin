@@ -1001,20 +1001,26 @@ SELECT STX_Relatematch(
 
 ### STX_Makepoint
 
-座標値から POINT ジオメトリを構築する。
-Creates a Point geometry from X and Y coordinate values.
+座標値から POINT ジオメトリを構築する。引数の順序は SRID の空間参照系定義に基づく軸順序に従う。
+Creates a Point geometry from coordinate values. Argument order follows the axis order defined by the SRID's spatial reference system.
 
 ```sql
-STX_Makepoint(x, y [, srid]) -> GEOMETRY (Point)
+STX_Makepoint(coord1, coord2 [, srid]) -> GEOMETRY (Point)
 ```
 
 #### 引数 (Arguments)
 
 | 引数 (Arg) | 型 (Type) | 説明 (Description) |
 |---|---|---|
-| x | DOUBLE | X 座標（経度） / X coordinate (longitude) |
-| y | DOUBLE | Y 座標（緯度） / Y coordinate (latitude) |
+| coord1 | DOUBLE | 第1座標。SRS 定義の第1軸に対応 / First coordinate, corresponding to the first axis of the SRS |
+| coord2 | DOUBLE | 第2座標。SRS 定義の第2軸に対応 / Second coordinate, corresponding to the second axis of the SRS |
 | srid | INTEGER | (任意) SRID。省略時は 0 / (Optional) SRID. Defaults to 0 |
+
+引数の解釈は SRID の SRS 定義に基づく軸順序で決まる。MySQL ビルトインの `ST_GeomFromText()` と同じ規則に従う。
+The interpretation of arguments follows the axis order defined by the SRID's spatial reference system, consistent with MySQL's built-in `ST_GeomFromText()`.
+
+- **Geographic SRID**（4326, 6668 等）: `coord1` = 緯度, `coord2` = 経度 / `coord1` = latitude, `coord2` = longitude
+- **Cartesian SRID**（SRID 0 含む）: `coord1` = X, `coord2` = Y
 
 #### 戻り値 (Return Value)
 
@@ -1024,21 +1030,24 @@ A Point geometry at the specified coordinates. Constructed directly as WKB for e
 #### 使用例 (Examples)
 
 ```sql
--- 基本的な使用法 / Basic usage
-SELECT ST_AsText(STX_Makepoint(139.7, 35.6));
--- POINT(139.7 35.6)
+-- Cartesian (SRID 0): (x, y) 順 / (x, y) order
+SELECT ST_AsText(STX_Makepoint(10, 20));
+-- POINT(10 20)
 
--- SRID 指定 / With SRID
-SELECT ST_AsText(STX_Makepoint(139.7, 35.6, 4326));
--- POINT(35.6 139.7)  (4326 uses lat,lon display order)
+-- Geographic (SRID 4326): (lat, lon) 順 / (lat, lon) order
+SELECT ST_AsText(STX_Makepoint(35.6, 139.7, 4326));
+-- POINT(35.6 139.7)
 
-SELECT ST_SRID(STX_Makepoint(139.7, 35.6, 4326));
--- 4326
+SELECT ST_Latitude(STX_Makepoint(35.6, 139.7, 4326));
+-- 35.6
+SELECT ST_Longitude(STX_Makepoint(35.6, 139.7, 4326));
+-- 139.7
 ```
 
 #### 対応する他の関数 (Equivalent in Other Systems)
 
-- PostGIS: `ST_MakePoint()`
+- PostGIS: `ST_MakePoint()` — 常に (lon, lat) 順。本関数は MySQL の SRS 軸順序に従う点が異なる
+  PostGIS always uses (lon, lat) order. This function follows MySQL's SRS axis order instead.
 - MySQL 標準: なし
 
 ---
