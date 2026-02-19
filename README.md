@@ -4,7 +4,7 @@ MySQL plugin that adds spatial functions (`STX_*`) powered by [Boost.Geometry](h
 Our approach: implement functions broadly first, then refine through thorough testing.
 Motto: *"Imperfect beats unavailable."*
 
-Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports both Cartesian and Geographic (WGS84) coordinate systems.
+Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports Cartesian (including projected CRS such as UTM) and Geographic (WGS84, etc.) coordinate systems.
 
 ## Functions (57)
 

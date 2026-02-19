@@ -15,7 +15,7 @@ All functions support both Cartesian and Geographic coordinate systems.
 
 | 座標系 (CS) | 距離・周長の単位 (Unit) | 対象SRID (Target SRIDs) |
 |---|---|---|
-| Cartesian | 座標単位・無次元 (coordinate units) | 0 and other non-geographic SRIDs |
+| Cartesian | 座標単位 (coordinate units) | 0, projected CRS (UTM, etc.), and other non-geographic SRIDs |
 | Geographic | メートル (meters) | 4326 (WGS84), 6668 (JGD2011), etc. (~500 SRIDs) |
 
 Geographic 座標系では WGS84 楕円体上の測地線計算（Vincenty 法）を使用する。
