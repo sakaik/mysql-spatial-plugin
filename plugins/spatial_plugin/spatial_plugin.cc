@@ -1565,10 +1565,11 @@ static char *stx_makepoint(UDF_INIT *, UDF_ARGS *args, char *result,
   if (args->arg_count == 3)
     srid = static_cast<uint32_t>(*reinterpret_cast<long long *>(args->args[2]));
 
-  double wkb_x, wkb_y;
+  // Range validation for geographic SRIDs (lat/lon bounds).
   if (is_geographic_srid(srid)) {
-    // Arguments follow SRS axis order (lat, lon).
-    double lat = arg1, lon = arg2;
+    // Determine which arg is lat and which is lon based on axis order.
+    double lat = needs_axis_swap(srid) ? arg1 : arg2;
+    double lon = needs_axis_swap(srid) ? arg2 : arg1;
     if (lat < -90.0 || lat > 90.0) {
       my_error(ER_LATITUDE_OUT_OF_RANGE, MYF(0), lat, "stx_makepoint",
                -90.0, 90.0);
@@ -1579,13 +1580,12 @@ static char *stx_makepoint(UDF_INIT *, UDF_ARGS *args, char *result,
                -180.0, 180.0);
       *error = 1; return nullptr;
     }
-    // Internal WKB stores (lon, lat).
-    wkb_x = lon;
-    wkb_y = lat;
-  } else {
-    wkb_x = arg1;
-    wkb_y = arg2;
   }
+
+  // Swap coordinates when first axis is NORTH (lat/northing first in SRS).
+  // Internal WKB always stores (x=easting/lon, y=northing/lat).
+  double wkb_x = needs_axis_swap(srid) ? arg2 : arg1;
+  double wkb_y = needs_axis_swap(srid) ? arg1 : arg2;
 
   auto wkb = write_point_wkb(srid, wkb_x, wkb_y);
   *length = static_cast<unsigned long>(wkb.size());

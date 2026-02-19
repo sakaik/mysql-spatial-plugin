@@ -796,6 +796,18 @@ CALL assert_error(
   'stx_makepoint(0, -180.1, 4326)',
   3616);
 
+-- Geographic SRID with lon-lat axis order (SRID 7035: RGSPM06 lon-lat)
+-- First axis is EAST (lon), second is NORTH (lat) → no swap
+CALL assert_eq_double(
+  'makepoint: SRID 7035 (lon-lat) longitude (arg1=2.0)',
+  ST_Longitude(stx_makepoint(2.0, 47.0, 7035)),
+  2.0, 0.0001);
+
+CALL assert_eq_double(
+  'makepoint: SRID 7035 (lon-lat) latitude (arg2=47.0)',
+  ST_Latitude(stx_makepoint(2.0, 47.0, 7035)),
+  47.0, 0.0001);
+
 -- Cartesian SRID: no range check (any values allowed)
 CALL assert_eq_text(
   'makepoint: SRID 0 allows any values',

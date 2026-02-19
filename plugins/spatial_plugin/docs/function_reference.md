@@ -1016,11 +1016,20 @@ STX_Makepoint(coord1, coord2 [, srid]) -> GEOMETRY (Point)
 | coord2 | DOUBLE | 第2座標。SRS 定義の第2軸に対応 / Second coordinate, corresponding to the second axis of the SRS |
 | srid | INTEGER | (任意) SRID。省略時は 0 / (Optional) SRID. Defaults to 0 |
 
-引数の解釈は SRID の SRS 定義に基づく軸順序で決まる。MySQL ビルトインの `ST_GeomFromText()` と同じ規則に従う。
-The interpretation of arguments follows the axis order defined by the SRID's spatial reference system, consistent with MySQL's built-in `ST_GeomFromText()`.
+引数の解釈は SRID の SRS 定義（`information_schema.ST_SPATIAL_REFERENCE_SYSTEMS` の `AXIS[]` エントリ）に基づく軸順序で決まる。MySQL ビルトインの `ST_GeomFromText()` と同じ規則に従う。
+The interpretation of arguments follows the axis order defined by the SRS `AXIS[]` entries in `information_schema.ST_SPATIAL_REFERENCE_SYSTEMS`, consistent with MySQL's built-in `ST_GeomFromText()`.
 
-- **Geographic SRID**（4326, 6668 等）: `coord1` = 緯度, `coord2` = 経度 / `coord1` = latitude, `coord2` = longitude
-- **Cartesian SRID**（SRID 0 含む）: `coord1` = X, `coord2` = Y
+| SRID | 例 (Example) | 第1軸 (1st axis) | coord1 | coord2 |
+|---|---|---|---|---|
+| 4326 | WGS 84 | Lat, NORTH | 緯度 / latitude | 経度 / longitude |
+| 6668 | JGD2011 | Lat, NORTH | 緯度 / latitude | 経度 / longitude |
+| 7035 | RGSPM06 (lon-lat) | Lon, EAST | 経度 / longitude | 緯度 / latitude |
+| 2451 | 日本平面直角9系 | X, NORTH | 北方向 / northing | 東方向 / easting |
+| 3857 | Web Mercator | X, EAST | X | Y |
+| 0 | (Cartesian) | — | X | Y |
+
+Geographic SRID では、緯度 [-90, 90]、経度 [-180, 180] の範囲外は ERROR 3617 / 3616 となる。
+For geographic SRIDs, latitude must be within [-90, 90] and longitude within [-180, 180], otherwise ERROR 3617 / 3616 is raised.
 
 #### 戻り値 (Return Value)
 
@@ -1042,6 +1051,10 @@ SELECT ST_Latitude(STX_Makepoint(35.6, 139.7, 4326));
 -- 35.6
 SELECT ST_Longitude(STX_Makepoint(35.6, 139.7, 4326));
 -- 139.7
+
+-- Geographic with lon-lat axis order (SRID 7035): (lon, lat) 順
+SELECT ST_Longitude(STX_Makepoint(2.0, 47.0, 7035));
+-- 2.0
 ```
 
 #### 対応する他の関数 (Equivalent in Other Systems)

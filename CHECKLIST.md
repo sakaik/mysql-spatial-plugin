@@ -7,31 +7,31 @@
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
 | `STX_Perimeter(geom)` | Polygon/MultiPolygon の周長 | https://sakaik.hateblo.jp/entry/20260219/STX_Perimeter_func |
-| `STX_Coveredby(g1, g2)` | g1 が g2 に覆われているか判定 | |
+| `STX_CoveredBy(g1, g2)` | g1 が g2 に覆われているか判定 | |
 | `STX_Covers(g1, g2)` | g1 が g2 を覆っているか判定 | |
 | `STX_Dwithin(g1, g2, dist)` | 2つのジオメトリ間の距離が閾値以内か判定 | |
 | `STX_Azimuth(p1, p2)` | p1 から p2 への方位角（ラジアン、北から時計回り） | |
 | `STX_Angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 | |
 | `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す | |
-| `STX_Relatematch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 | |
-| `STX_Npoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） |https://sakaik.hateblo.jp/entry/20260219/STX_NPoints_func |
-| `STX_Isring(linestring)` | LineString がリング（閉環・非自己交差）か判定 | |
+| `STX_RelateMatch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 | |
+| `STX_NPoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） |https://sakaik.hateblo.jp/entry/20260219/STX_NPoints_func |
+| `STX_IsRing(linestring)` | LineString がリング（閉環・非自己交差）か判定 | |
 
 ## ジオメトリ処理
 
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
 | `STX_Project(point, dist, azimuth)` | 指定距離・方位角で点を投影 | |
-| `STX_Linelocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） | |
-| `STX_Linesubstring(line, start, end)` | ラインの一部を抽出 | |
-| `STX_Closestpoint(point, geom)` | ジオメトリ上の最近接点を返す | |
-| `STX_Shortestline(g1, g2)` | 2つのジオメトリ間の最短線分を返す | |
-| `STX_Pointonsurface(geom)` | ポリゴン内部の点を返す | |
+| `STX_LineLocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） | |
+| `STX_LineSubstring(line, start, end)` | ラインの一部を抽出 | |
+| `STX_ClosestPoint(point, geom)` | ジオメトリ上の最近接点を返す | |
+| `STX_ShortestLine(g1, g2)` | 2つのジオメトリ間の最短線分を返す | |
+| `STX_PointonSurface(geom)` | ポリゴン内部の点を返す | |
 | `STX_Points(geom)` | 全頂点を MultiPoint として抽出 | |
-| `STX_Makepoint(x, y [, srid])` | 座標から POINT を構築 | |
+| `STX_MakePoint(x, y [, srid])` | 座標から POINT を構築 | https://sakaik.hateblo.jp/entry/20260219/STX_MakePoint_func |
 | `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 | |
-| `STX_Makepolygon(ring [, inner_rings])` | LineString から Polygon を構築 | |
-| `STX_Generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 | |
+| `STX_MakePolygon(ring [, inner_rings])` | LineString から Polygon を構築 | |
+| `STX_GeneratePoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 | |
 | `STX_Minimumboundingcircle(geom [, segs])` | 最小外接円（Polygon として返却） | |
 | `STX_Squaregrid(size, geom)` | バウンディングボックスを覆う矩形グリッド | |
 | `STX_Hexgrid(size, geom)` | バウンディングボックスを覆う六角形グリッド | |

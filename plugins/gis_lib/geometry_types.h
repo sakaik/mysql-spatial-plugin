@@ -89,6 +89,14 @@ inline bool is_geographic_srid(uint32_t srid) {
   return GEOGRAPHIC_SRIDS.count(srid) > 0;
 }
 
+// Returns true if the SRS definition has NORTH as the first axis direction.
+// For these SRIDs, user-facing coordinate order is (lat/northing, lon/easting)
+// but internal WKB stores (lon/easting, lat/northing), so swapping is required.
+// Based on AXIS[] entries in the SRS DEFINITION column.
+inline bool needs_axis_swap(uint32_t srid) {
+  return AXIS_SWAP_SRIDS.count(srid) > 0;
+}
+
 }  // namespace gis_lib
 
 #endif  // GIS_LIB_GEOMETRY_TYPES_H
