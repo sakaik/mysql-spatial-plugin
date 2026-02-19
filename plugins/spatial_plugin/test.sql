@@ -82,6 +82,33 @@ BEGIN
   END IF;
 END//
 
+DROP PROCEDURE IF EXISTS assert_error//
+CREATE PROCEDURE assert_error(
+  IN test_name VARCHAR(255),
+  IN stmt TEXT,
+  IN expected_errno INT
+)
+BEGIN
+  DECLARE actual_errno INT DEFAULT 0;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+    GET DIAGNOSTICS CONDITION 1 actual_errno = MYSQL_ERRNO;
+  SET @stx_dummy = NULL;
+  SET @stx_stmt = CONCAT('SELECT ', stmt, ' INTO @stx_dummy');
+  PREPARE stx_s FROM @stx_stmt;
+  EXECUTE stx_s;
+  DEALLOCATE PREPARE stx_s;
+  SET @total = @total + 1;
+  IF actual_errno = expected_errno THEN
+    SET @pass = @pass + 1;
+    SELECT CONCAT('[PASS] ', test_name) AS result;
+  ELSE
+    SET @fail = @fail + 1;
+    SELECT CONCAT('[FAIL] ', test_name,
+                  ' -- expected errno: ', expected_errno,
+                  ', got: ', actual_errno) AS result;
+  END IF;
+END//
+
 DELIMITER ;
 
 -- =============================================================================
@@ -108,10 +135,11 @@ CALL assert_eq_double(
   stx_perimeter(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 6668)),
   4421233.0, 5000.0);
 
-CALL assert_eq_double(
-  'perimeter: non-polygon returns 0',
-  stx_perimeter(ST_GeomFromText('POINT(1 1)')),
-  0.0, 0.001);
+-- non-polygon type should raise error ER_UNEXPECTED_GEOMETRY_TYPE (3516)
+CALL assert_error(
+  'perimeter: POINT raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'stx_perimeter(ST_GeomFromText(''POINT(1 1)''))',
+  3516);
 
 -- NULL input
 CALL assert_eq_double(
@@ -1992,6 +2020,22 @@ CALL assert_eq_int(
   stx_npoints(NULL),
   NULL);
 
+-- Geographic (SRID 6668 JGD2011)
+CALL assert_eq_int(
+  'npoints: Geographic Point (SRID 6668)',
+  stx_npoints(ST_GeomFromText('POINT(35 135)', 6668)),
+  1);
+
+CALL assert_eq_int(
+  'npoints: Geographic LineString (SRID 6668)',
+  stx_npoints(ST_GeomFromText('LINESTRING(35 135, 35.5 135, 35.3 135.5, 35 135.5)', 6668)),
+  4);
+
+CALL assert_eq_int(
+  'npoints: Geographic Polygon (SRID 6668)',
+  stx_npoints(ST_GeomFromText('POLYGON((35 135, 35.5 135, 35.3 135.5, 35 135.5, 35 135))', 6668)),
+  5);
+
 -- =============================================================================
 -- stx_makeline
 -- =============================================================================
@@ -2165,6 +2209,68 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- Type error tests (ER_UNEXPECTED_GEOMETRY_TYPE = 3516)
+-- =============================================================================
+
+-- isring: only accepts LineString
+CALL assert_error(
+  'isring: POINT raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'stx_isring(ST_GeomFromText(''POINT(1 1)''))',
+  3516);
+
+CALL assert_error(
+  'isring: POLYGON raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'stx_isring(ST_GeomFromText(''POLYGON((0 0,1 0,1 1,0 1,0 0))''))',
+  3516);
+
+-- linelocatepoint: requires (LineString, Point)
+CALL assert_error(
+  'linelocatepoint: POINT as 1st arg raises error',
+  'stx_linelocatepoint(ST_GeomFromText(''POINT(1 1)''), ST_GeomFromText(''POINT(0 0)''))',
+  3516);
+
+CALL assert_error(
+  'linelocatepoint: LINESTRING as 2nd arg raises error',
+  'stx_linelocatepoint(ST_GeomFromText(''LINESTRING(0 0,1 1)''), ST_GeomFromText(''LINESTRING(0 0,1 1)''))',
+  3516);
+
+-- linesubstring: only accepts LineString
+CALL assert_error(
+  'linesubstring: POLYGON raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'stx_linesubstring(ST_GeomFromText(''POLYGON((0 0,1 0,1 1,0 1,0 0))''), 0.0, 0.5)',
+  3516);
+
+-- offsetcurve: only accepts LineString
+CALL assert_error(
+  'offsetcurve: POINT raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'stx_offsetcurve(ST_GeomFromText(''POINT(1 1)''), 1.0)',
+  3516);
+
+-- makeline 2-arg: requires Point + Point
+CALL assert_error(
+  'makeline: LINESTRING arg raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'ST_AsText(stx_makeline(ST_GeomFromText(''LINESTRING(0 0,1 1)''), ST_GeomFromText(''POINT(2 2)'')))',
+  3516);
+
+-- makeline 1-arg: requires MultiPoint
+CALL assert_error(
+  'makeline: LINESTRING (single arg) raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'ST_AsText(stx_makeline(ST_GeomFromText(''LINESTRING(0 0,1 1,2 2)'')))',
+  3516);
+
+-- makepolygon: outer ring must be LineString
+CALL assert_error(
+  'makepolygon: POINT raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'ST_AsText(stx_makepolygon(ST_GeomFromText(''POINT(1 1)'')))',
+  3516);
+
+-- makepolygon: inner rings must be MultiLineString
+CALL assert_error(
+  'makepolygon: inner ring POINT raises ER_UNEXPECTED_GEOMETRY_TYPE',
+  'ST_AsText(stx_makepolygon(ST_GeomFromText(''LINESTRING(0 0,10 0,10 10,0 10,0 0)''), ST_GeomFromText(''POINT(5 5)'')))',
+  3516);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 
@@ -2179,4 +2285,5 @@ SELECT CONCAT(
 DROP PROCEDURE IF EXISTS assert_eq_double;
 DROP PROCEDURE IF EXISTS assert_eq_int;
 DROP PROCEDURE IF EXISTS assert_eq_text;
+DROP PROCEDURE IF EXISTS assert_error;
 DROP DATABASE IF EXISTS stx_test;

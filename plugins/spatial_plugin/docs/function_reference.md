@@ -119,7 +119,7 @@ STX_Perimeter(geometry) -> DOUBLE
 
 - Cartesian: 座標単位での周長 / Perimeter in coordinate units
 - Geographic: メートル単位での測地線周長 / Geodesic perimeter in meters (WGS84)
-- Polygon/MultiPolygon 以外の場合は `0.0` / Returns `0.0` for other geometry types
+- Polygon/MultiPolygon 以外の場合は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`) / Raises ERROR 3516 for other geometry types
 
 #### 使用例 (Examples)
 
@@ -480,8 +480,10 @@ SELECT STX_Linelocatepoint(
 
 #### 備考 (Notes)
 
-`STX_Linesubstring` と組み合わせることで、点の近傍でラインを分割する等の操作が可能。
-Can be combined with `STX_Linesubstring` to split a line near a given point.
+- `STX_Linesubstring` と組み合わせることで、点の近傍でラインを分割する等の操作が可能。
+  Can be combined with `STX_Linesubstring` to split a line near a given point.
+- 第1引数が LineString 以外、または第2引数が Point 以外の場合は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`)。
+  Raises ERROR 3516 if the first argument is not a LineString or the second is not a Point.
 
 #### 対応する他の関数 (Equivalent in Other Systems)
 
@@ -532,6 +534,11 @@ SELECT ST_AsText(STX_Linesubstring(
   ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.25, 0.75));
 -- LINESTRING(5 0,10 0,10 5)
 ```
+
+#### 備考 (Notes)
+
+- 第1引数が LineString 以外の場合は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`)。
+  Raises ERROR 3516 if the first argument is not a LineString.
 
 #### 対応する他の関数 (Equivalent in Other Systems)
 
@@ -1905,6 +1912,11 @@ SELECT ST_AsText(STX_Offsetcurve(
   ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 1, 8, 2));
 ```
 
+#### 備考 (Notes)
+
+- LineString 以外のジオメトリ型を渡した場合は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`)。
+  Raises ERROR 3516 if the geometry is not a LineString.
+
 #### 対応する他の関数 (Equivalent in Other Systems)
 
 - PostGIS: `ST_OffsetCurve()`
@@ -2609,6 +2621,11 @@ SELECT ST_AsText(STX_Makeline(
 -- LINESTRING(0 0,1 1,2 2)
 ```
 
+#### 備考 (Notes)
+
+- 2引数モードでは両引数が Point であること。1引数モードでは MultiPoint であること。それ以外は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`)。
+  In 2-argument mode, both must be Points. In 1-argument mode, must be a MultiPoint. Raises ERROR 3516 otherwise.
+
 ---
 
 ### STX_Makepolygon
@@ -2640,6 +2657,11 @@ SELECT ST_AsText(STX_Makepolygon(
   ST_GeomFromText('MULTILINESTRING((2 2,4 2,4 4,2 4,2 2))')));
 -- POLYGON((0 0,0 10,10 10,10 0,0 0),(2 2,4 2,4 4,2 4,2 2))
 ```
+
+#### 備考 (Notes)
+
+- 外環が LineString 以外、または内環が MultiLineString 以外の場合は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`)。
+  Raises ERROR 3516 if the outer ring is not a LineString or inner rings are not a MultiLineString.
 
 ---
 
@@ -2697,6 +2719,11 @@ SELECT STX_Isring(ST_GeomFromText('LINESTRING(0 0,1 1,2 2)'));
 SELECT STX_Isring(ST_GeomFromText('LINESTRING(0 0,2 0,0 2,2 2,0 0)'));
 -- 0 (closed but self-intersecting)
 ```
+
+#### 備考 (Notes)
+
+- LineString 以外のジオメトリ型を渡した場合は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`)。
+  Raises ERROR 3516 if the geometry is not a LineString.
 
 ---
 

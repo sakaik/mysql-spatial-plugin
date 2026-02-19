@@ -14,7 +14,7 @@
 | `STX_Angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 | |
 | `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す | |
 | `STX_Relatematch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 | |
-| `STX_Npoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） | |
+| `STX_Npoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） |https://sakaik.hateblo.jp/entry/20260219/STX_NPoints_func |
 | `STX_Isring(linestring)` | LineString がリング（閉環・非自己交差）か判定 | |
 
 ## ジオメトリ処理

@@ -7,6 +7,8 @@
 #include <mysql/service_plugin_registry.h>
 #include <mysql/components/my_service.h>
 #include <mysql/components/services/udf_registration.h>
+#include <mysql/components/services/mysql_runtime_error_service.h>
+#include <mysqld_error.h>
 #include <string.h>
 
 #include <algorithm>
@@ -42,6 +44,20 @@
 
 using namespace gis_lib;
 
+// Geometry type name lookup for error messages
+static const char *geometry_type_name(GeometryType t) {
+  switch (t) {
+    case GeometryType::Point: return "POINT";
+    case GeometryType::LineString: return "LINESTRING";
+    case GeometryType::Polygon: return "POLYGON";
+    case GeometryType::MultiPoint: return "MULTIPOINT";
+    case GeometryType::MultiLineString: return "MULTILINESTRING";
+    case GeometryType::MultiPolygon: return "MULTIPOLYGON";
+    case GeometryType::GeometryCollection: return "GEOMETRYCOLLECTION";
+    default: return "UNKNOWN";
+  }
+}
+
 static const bg::srs::spheroid<double> WGS84(6378137.0, 6356752.314245179);
 static constexpr double DEG2RAD = M_PI / 180.0;
 static constexpr double RAD2DEG = 180.0 / M_PI;
@@ -67,16 +83,16 @@ static std::optional<TwoGeom> parse_two_geoms(UDF_ARGS *args) {
 
 // ===== Perimeter =============================================================
 
-static double perimeter_cartesian(const CartesianVariant &geom) {
+static std::optional<double> perimeter_cartesian(const CartesianVariant &geom) {
   if (auto *p = std::get_if<Polygon>(&geom)) return bg::perimeter(*p);
   if (auto *p = std::get_if<MultiPolygon>(&geom)) return bg::perimeter(*p);
-  return 0.0;
+  return std::nullopt;
 }
 
-static double perimeter_geographic(const GeographicVariant &geom) {
+static std::optional<double> perimeter_geographic(const GeographicVariant &geom) {
   if (auto *p = std::get_if<GeoPolygon>(&geom)) return bg::perimeter(*p);
   if (auto *p = std::get_if<GeoMultiPolygon>(&geom)) return bg::perimeter(*p);
-  return 0.0;
+  return std::nullopt;
 }
 
 // ===== CoveredBy =============================================================
@@ -388,11 +404,20 @@ static double stx_perimeter(UDF_INIT *, UDF_ARGS *args, char *is_null,
   if (!args->args[0]) { *is_null = 1; return 0.0; }
   auto r = parse_geometry(args->args[0], args->lengths[0]);
   if (!r) { *error = 1; return 0.0; }
+  std::optional<double> result;
   if (auto *c = std::get_if<CartesianVariant>(&r->geometry))
-    return perimeter_cartesian(*c);
-  if (auto *g = std::get_if<GeographicVariant>(&r->geometry))
-    return perimeter_geographic(*g);
-  return 0.0;
+    result = perimeter_cartesian(*c);
+  else if (auto *g = std::get_if<GeographicVariant>(&r->geometry))
+    result = perimeter_geographic(*g);
+  if (!result) {
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "POLYGON/MULTIPOLYGON",
+             geometry_type_name(r->type),
+             "stx_perimeter");
+    *error = 1;
+    return 0.0;
+  }
+  return *result;
 }
 
 static void stx_perimeter_deinit(UDF_INIT *) {}
@@ -633,6 +658,19 @@ static double stx_linelocatepoint(UDF_INIT *, UDF_ARGS *args, char *is_null,
   auto r2 = parse_geometry(args->args[1], args->lengths[1]);
   if (!r1 || !r2) { *error = 1; return 0.0; }
 
+  if (r1->type != GeometryType::LineString) {
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "LINESTRING", geometry_type_name(r1->type),
+             "stx_linelocatepoint");
+    *error = 1; return 0.0;
+  }
+  if (r2->type != GeometryType::Point) {
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "POINT", geometry_type_name(r2->type),
+             "stx_linelocatepoint");
+    *error = 1; return 0.0;
+  }
+
   if (auto *c1 = std::get_if<CartesianVariant>(&r1->geometry)) {
     auto *ls = std::get_if<Linestring>(c1);
     auto *c2 = std::get_if<CartesianVariant>(&r2->geometry);
@@ -682,6 +720,12 @@ static char *stx_linesubstring(UDF_INIT *initid, UDF_ARGS *args, char *result,
   }
   auto r = parse_geometry(args->args[0], args->lengths[0]);
   if (!r) { *error = 1; return nullptr; }
+  if (r->type != GeometryType::LineString) {
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "LINESTRING", geometry_type_name(r->type),
+             "stx_linesubstring");
+    *error = 1; return nullptr;
+  }
   double sf = *reinterpret_cast<double *>(args->args[1]);
   double ef = *reinterpret_cast<double *>(args->args[2]);
   sf = std::max(0.0, std::min(1.0, sf));
@@ -690,14 +734,12 @@ static char *stx_linesubstring(UDF_INIT *initid, UDF_ARGS *args, char *result,
   std::string wkb;
 
   if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
-    auto *ls = std::get_if<Linestring>(cv);
-    if (!ls) { *error = 1; return nullptr; }
-    auto sub = line_substring_impl<Point, Linestring>(*ls, sf, ef);
+    auto &ls = std::get<Linestring>(*cv);
+    auto sub = line_substring_impl<Point, Linestring>(ls, sf, ef);
     wkb = write_linestring(r->srid, sub);
   } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
-    auto *ls = std::get_if<GeoLinestring>(gv);
-    if (!ls) { *error = 1; return nullptr; }
-    auto sub = line_substring_impl<GeoPoint, GeoLinestring>(*ls, sf, ef);
+    auto &ls = std::get<GeoLinestring>(*gv);
+    auto sub = line_substring_impl<GeoPoint, GeoLinestring>(ls, sf, ef);
     wkb = write_linestring(r->srid, sub);
   } else {
     *error = 1;
@@ -3273,6 +3315,16 @@ static char *stx_offsetcurve(UDF_INIT *initid, UDF_ARGS *args, char *result,
   if (!args->args[0]) { *is_null = 1; return nullptr; }
   if (!args->args[1]) { *is_null = 1; return nullptr; }
 
+  // OffsetCurve only works on LineString — check type from WKB header
+  uint32_t wkb_type = 0;
+  if (args->lengths[0] >= 9) std::memcpy(&wkb_type, args->args[0] + 5, 4);
+  GeometryType gt = static_cast<GeometryType>(wkb_type);
+  if (gt != GeometryType::LineString) {
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "LINESTRING", geometry_type_name(gt), "stx_offsetcurve");
+    *error = 1; return nullptr;
+  }
+
   uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
   auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
   if (!geom) { *error = 1; return nullptr; }
@@ -4128,7 +4180,14 @@ static char *stx_makeline(UDF_INIT *initid, UDF_ARGS *args, char *result,
     auto r1 = parse_geometry(args->args[0], args->lengths[0]);
     auto r2 = parse_geometry(args->args[1], args->lengths[1]);
     if (!r1 || !r2) { *error = 1; return nullptr; }
-    if (r1->type != GeometryType::Point || r2->type != GeometryType::Point) {
+    if (r1->type != GeometryType::Point) {
+      my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+               "POINT", geometry_type_name(r1->type), "stx_makeline");
+      *error = 1; return nullptr;
+    }
+    if (r2->type != GeometryType::Point) {
+      my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+               "POINT", geometry_type_name(r2->type), "stx_makeline");
       *error = 1; return nullptr;
     }
 
@@ -4160,7 +4219,11 @@ static char *stx_makeline(UDF_INIT *initid, UDF_ARGS *args, char *result,
     // Single argument: MultiPoint -> LineString
     auto r = parse_geometry(args->args[0], args->lengths[0]);
     if (!r) { *error = 1; return nullptr; }
-    if (r->type != GeometryType::MultiPoint) { *error = 1; return nullptr; }
+    if (r->type != GeometryType::MultiPoint) {
+      my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+               "MULTIPOINT", geometry_type_name(r->type), "stx_makeline");
+      *error = 1; return nullptr;
+    }
 
     std::string wkb;
     if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
@@ -4211,7 +4274,11 @@ static char *stx_makepolygon(UDF_INIT *initid, UDF_ARGS *args, char *result,
   if (!args->args[0]) { *is_null = 1; return nullptr; }
 
   auto r_outer = parse_geometry(args->args[0], args->lengths[0]);
-  if (!r_outer || r_outer->type != GeometryType::LineString) {
+  if (!r_outer) { *error = 1; return nullptr; }
+  if (r_outer->type != GeometryType::LineString) {
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "LINESTRING", geometry_type_name(r_outer->type),
+             "stx_makepolygon");
     *error = 1; return nullptr;
   }
 
@@ -4224,7 +4291,11 @@ static char *stx_makepolygon(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
     if (args->arg_count == 2 && args->args[1]) {
       auto r_inner = parse_geometry(args->args[1], args->lengths[1]);
-      if (!r_inner || r_inner->type != GeometryType::MultiLineString) {
+      if (!r_inner) { *error = 1; return nullptr; }
+      if (r_inner->type != GeometryType::MultiLineString) {
+        my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+                 "MULTILINESTRING", geometry_type_name(r_inner->type),
+                 "stx_makepolygon");
         *error = 1; return nullptr;
       }
       auto *cv_inner = std::get_if<CartesianVariant>(&r_inner->geometry);
@@ -4244,7 +4315,11 @@ static char *stx_makepolygon(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
     if (args->arg_count == 2 && args->args[1]) {
       auto r_inner = parse_geometry(args->args[1], args->lengths[1]);
-      if (!r_inner || r_inner->type != GeometryType::MultiLineString) {
+      if (!r_inner) { *error = 1; return nullptr; }
+      if (r_inner->type != GeometryType::MultiLineString) {
+        my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+                 "MULTILINESTRING", geometry_type_name(r_inner->type),
+                 "stx_makepolygon");
         *error = 1; return nullptr;
       }
       auto *gv_inner = std::get_if<GeographicVariant>(&r_inner->geometry);
@@ -4451,15 +4526,20 @@ static long long stx_isring(UDF_INIT *, UDF_ARGS *args, char *is_null,
                              char *error) {
   if (!args->args[0]) { *is_null = 1; return 0; }
 
+  // GEOSisRing only works on LineString — check type from WKB header
+  uint32_t wkb_type = 0;
+  if (args->lengths[0] >= 9) std::memcpy(&wkb_type, args->args[0] + 5, 4);
+  GeometryType gt = static_cast<GeometryType>(wkb_type);
+  if (gt != GeometryType::LineString) {
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "LINESTRING", geometry_type_name(gt), "stx_isring");
+    *error = 1; return 0;
+  }
+
   auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
   if (!geom) { *error = 1; return 0; }
 
   auto ctx = get_geos_context();
-
-  // GEOSisRing only works on LineString
-  int geom_type = GEOSGeomTypeId_r(ctx, geom.get());
-  if (geom_type != GEOS_LINESTRING) { *error = 1; return 0; }
-
   char result = GEOSisRing_r(ctx, geom.get());
   if (result == 2) { *error = 1; return 0; }  // GEOS error
   return result ? 1 : 0;
