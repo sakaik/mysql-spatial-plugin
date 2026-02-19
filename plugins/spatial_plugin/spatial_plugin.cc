@@ -1555,7 +1555,8 @@ static bool stx_makepoint_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
 }
 
 static char *stx_makepoint(UDF_INIT *, UDF_ARGS *args, char *result,
-                            unsigned long *length, char *is_null, char *) {
+                            unsigned long *length, char *is_null,
+                            char *error) {
   if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
   if (args->arg_count == 3 && !args->args[2]) { *is_null = 1; return nullptr; }
   double arg1 = *reinterpret_cast<double *>(args->args[0]);
@@ -1563,10 +1564,29 @@ static char *stx_makepoint(UDF_INIT *, UDF_ARGS *args, char *result,
   uint32_t srid = 0;
   if (args->arg_count == 3)
     srid = static_cast<uint32_t>(*reinterpret_cast<long long *>(args->args[2]));
-  // For geographic SRIDs, arguments follow SRS axis order (lat, lon),
-  // but internal WKB stores (lon, lat). Swap accordingly.
-  double wkb_x = is_geographic_srid(srid) ? arg2 : arg1;
-  double wkb_y = is_geographic_srid(srid) ? arg1 : arg2;
+
+  double wkb_x, wkb_y;
+  if (is_geographic_srid(srid)) {
+    // Arguments follow SRS axis order (lat, lon).
+    double lat = arg1, lon = arg2;
+    if (lat < -90.0 || lat > 90.0) {
+      my_error(ER_LATITUDE_OUT_OF_RANGE, MYF(0), lat, "stx_makepoint",
+               -90.0, 90.0);
+      *error = 1; return nullptr;
+    }
+    if (lon < -180.0 || lon > 180.0) {
+      my_error(ER_LONGITUDE_OUT_OF_RANGE, MYF(0), lon, "stx_makepoint",
+               -180.0, 180.0);
+      *error = 1; return nullptr;
+    }
+    // Internal WKB stores (lon, lat).
+    wkb_x = lon;
+    wkb_y = lat;
+  } else {
+    wkb_x = arg1;
+    wkb_y = arg2;
+  }
+
   auto wkb = write_point_wkb(srid, wkb_x, wkb_y);
   *length = static_cast<unsigned long>(wkb.size());
   std::memcpy(result, wkb.data(), wkb.size());

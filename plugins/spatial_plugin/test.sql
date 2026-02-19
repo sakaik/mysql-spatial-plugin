@@ -753,6 +753,55 @@ CALL assert_eq_text(
   ST_AsText(stx_makepoint(10, 20)),
   'POINT(10 20)');
 
+-- Boundary values: lat [-90, 90], lon [-180, 180]
+CALL assert_eq_double(
+  'makepoint: lat=90 accepted',
+  ST_Latitude(stx_makepoint(90, 0, 4326)),
+  90, 0.0001);
+
+CALL assert_eq_double(
+  'makepoint: lat=-90 accepted',
+  ST_Latitude(stx_makepoint(-90, 0, 4326)),
+  -90, 0.0001);
+
+CALL assert_eq_double(
+  'makepoint: lon=180 accepted',
+  ST_Longitude(stx_makepoint(0, 180, 4326)),
+  180, 0.0001);
+
+CALL assert_eq_double(
+  'makepoint: lon=-180 accepted',
+  ST_Longitude(stx_makepoint(0, -180, 4326)),
+  -180, 0.0001);
+
+-- Out of range: latitude
+CALL assert_error(
+  'makepoint: lat=90.1 raises ER_LATITUDE_OUT_OF_RANGE',
+  'stx_makepoint(90.1, 0, 4326)',
+  3617);
+
+CALL assert_error(
+  'makepoint: lat=-90.1 raises ER_LATITUDE_OUT_OF_RANGE',
+  'stx_makepoint(-90.1, 0, 4326)',
+  3617);
+
+-- Out of range: longitude
+CALL assert_error(
+  'makepoint: lon=180.1 raises ER_LONGITUDE_OUT_OF_RANGE',
+  'stx_makepoint(0, 180.1, 4326)',
+  3616);
+
+CALL assert_error(
+  'makepoint: lon=-180.1 raises ER_LONGITUDE_OUT_OF_RANGE',
+  'stx_makepoint(0, -180.1, 4326)',
+  3616);
+
+-- Cartesian SRID: no range check (any values allowed)
+CALL assert_eq_text(
+  'makepoint: SRID 0 allows any values',
+  ST_AsText(stx_makepoint(999, -999)),
+  'POINT(999 -999)');
+
 CALL assert_eq_text(
   'makepoint: NULL x returns NULL',
   ST_AsText(stx_makepoint(NULL, 1)),
