@@ -81,6 +81,9 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Buildarea](#stx_buildarea) | GEOMETRY | ラインから面構築 / Create area from linework (GEOS) |
 | [STX_Sharedpaths](#stx_sharedpaths) | GEOMETRY | 共有パス抽出 / Shared paths between lineal geometries (GEOS) |
 | [STX_Node](#stx_node) | GEOMETRY | ラインのノード化 / Node a set of linestrings (GEOS) |
+| [STX_Simplifypreservetopology](#stx_simplifypreservetopology) | GEOMETRY | トポロジ保持簡略化 / Topology-preserving simplification (GEOS) |
+| [STX_Unaryunion](#stx_unaryunion) | GEOMETRY | 構成要素の Union / Union of all components (GEOS) |
+| [STX_Clipbyrect](#stx_clipbyrect) | GEOMETRY | 矩形クリッピング / Fast rectangle clipping (GEOS) |
 
 ---
 
@@ -2133,14 +2136,118 @@ SELECT ST_NumGeometries(STX_Node(ST_GeomFromText(
 
 ---
 
+### STX_Simplifypreservetopology
+
+トポロジを保持しながらジオメトリを簡略化する。MySQL の `ST_Simplify` とは異なり、ポリゴンのリング交差や崩壊を防止する。
+Simplifies geometry using Douglas-Peucker while preserving topology. Unlike MySQL's `ST_Simplify`, prevents ring crossings and collapses in polygons.
+
+```sql
+STX_Simplifypreservetopology(geometry, tolerance) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 簡略化対象のジオメトリ / Geometry to simplify |
+| tolerance | DOUBLE | 簡略化の許容距離 / Distance tolerance for simplification |
+
+#### 使用例 (Examples)
+
+```sql
+-- ポリゴンの簡略化（トポロジ保持）/ Simplify polygon preserving topology
+SELECT ST_NumPoints(ST_ExteriorRing(STX_Simplifypreservetopology(
+  ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 2)));
+-- 5 (reduced from 7)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_SimplifyPreserveTopology()`
+- MySQL 標準: `ST_Simplify()`（トポロジ保持なし）
+
+---
+
+### STX_Unaryunion
+
+単一ジオメトリの全構成要素を Union する。重複する MultiPolygon の修復等に使用。
+Computes the union of all components of a geometry. Useful for dissolving overlapping MultiPolygons.
+
+```sql
+STX_Unaryunion(geometry) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | Union 対象のジオメトリ / Geometry to union |
+
+#### 使用例 (Examples)
+
+```sql
+-- 重複する2つのポリゴンを Union / Union overlapping polygons
+SELECT ST_Area(STX_Unaryunion(ST_GeomFromText(
+  'MULTIPOLYGON(((0 0,10 0,10 10,0 10,0 0)),((5 5,15 5,15 15,5 15,5 5)))')));
+-- 175 (200 - 25 overlap)
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_UnaryUnion()`
+- MySQL 標準: `ST_Union()`（2つのジオメトリのみ）
+
+---
+
+### STX_Clipbyrect
+
+ジオメトリを2Dバウンディングボックスで高速にクリッピングする。
+Fast clipping of a geometry by a 2D bounding box.
+
+```sql
+STX_Clipbyrect(geometry, xmin, ymin, xmax, ymax) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | クリッピング対象 / Geometry to clip |
+| xmin | DOUBLE | 矩形の最小 X / Minimum X of clipping rectangle |
+| ymin | DOUBLE | 矩形の最小 Y / Minimum Y of clipping rectangle |
+| xmax | DOUBLE | 矩形の最大 X / Maximum X of clipping rectangle |
+| ymax | DOUBLE | 矩形の最大 Y / Maximum Y of clipping rectangle |
+
+#### 備考 (Notes)
+
+- `ST_Intersection` より高速だが、出力の妥当性は保証されない場合がある / Faster than `ST_Intersection` but output validity is not always guaranteed
+- 入力がバウンディングボックスと交差しない場合は空ジオメトリを返す / Returns empty geometry if input is disjoint from the rectangle
+
+#### 使用例 (Examples)
+
+```sql
+-- ポリゴンの左下1/4をクリップ / Clip lower-left quarter of polygon
+SELECT ST_Area(STX_Clipbyrect(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+  0, 0, 5, 5));
+-- 25
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_ClipByBox2D()`
+- MySQL 標準: なし
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全43関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 43 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全46関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 46 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -2199,6 +2306,9 @@ ORDER BY UDF_NAME;
 | STX_Buildarea                  | char            |
 | STX_Sharedpaths                | char            |
 | STX_Node                       | char            |
+| STX_Simplifypreservetopology   | char            |
+| STX_Unaryunion                 | char            |
+| STX_Clipbyrect                 | char            |
 +--------------------------------+-----------------+
 ```
 

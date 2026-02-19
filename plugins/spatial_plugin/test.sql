@@ -1663,6 +1663,132 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- STX_Simplifypreservetopology (Phase 4d)
+-- =============================================================================
+
+-- Basic simplification preserves polygon type
+CALL assert_eq_text(
+  'simplifypreservetopology: result is POLYGON',
+  ST_GeometryType(STX_Simplifypreservetopology(
+    ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 2)),
+  'POLYGON');
+
+-- High tolerance simplifies to fewer points
+CALL assert_eq_int(
+  'simplifypreservetopology: high tolerance reduces points',
+  ST_NumPoints(ST_ExteriorRing(STX_Simplifypreservetopology(
+    ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 2))),
+  5);
+
+-- Zero tolerance returns original
+CALL assert_eq_int(
+  'simplifypreservetopology: tolerance=0 preserves all points',
+  ST_NumPoints(ST_ExteriorRing(STX_Simplifypreservetopology(
+    ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 0))),
+  7);
+
+-- Linestring simplification
+CALL assert_eq_text(
+  'simplifypreservetopology: linestring stays LINESTRING',
+  ST_GeometryType(STX_Simplifypreservetopology(
+    ST_GeomFromText('LINESTRING(0 0, 1 0.1, 2 0, 3 0.1, 4 0)'), 0.5)),
+  'LINESTRING');
+
+-- NULL input
+CALL assert_eq_text(
+  'simplifypreservetopology: NULL returns NULL',
+  STX_Simplifypreservetopology(NULL, 1),
+  NULL);
+
+-- =============================================================================
+-- STX_Unaryunion (Phase 4d)
+-- =============================================================================
+
+-- Overlapping multipolygon dissolved into single polygon
+CALL assert_eq_text(
+  'unaryunion: overlapping multipolygon becomes POLYGON',
+  ST_GeometryType(STX_Unaryunion(ST_GeomFromText(
+    'MULTIPOLYGON(((0 0,10 0,10 10,0 10,0 0)),((5 5,15 5,15 15,5 15,5 5)))'))),
+  'POLYGON');
+
+-- Area of union is less than sum of parts (due to overlap)
+CALL assert_eq_double(
+  'unaryunion: area accounts for overlap',
+  ST_Area(STX_Unaryunion(ST_GeomFromText(
+    'MULTIPOLYGON(((0 0,10 0,10 10,0 10,0 0)),((5 5,15 5,15 15,5 15,5 5)))'))),
+  175.0, 0.001);
+
+-- Non-overlapping multipolygon stays as multipolygon
+CALL assert_eq_text(
+  'unaryunion: disjoint multipolygon stays MULTIPOLYGON',
+  ST_GeometryType(STX_Unaryunion(ST_GeomFromText(
+    'MULTIPOLYGON(((0 0,5 0,5 5,0 5,0 0)),((10 10,15 10,15 15,10 15,10 10)))'))),
+  'MULTIPOLYGON');
+
+-- Single polygon unchanged
+CALL assert_eq_double(
+  'unaryunion: single polygon area unchanged',
+  ST_Area(STX_Unaryunion(ST_GeomFromText(
+    'POLYGON((0 0,10 0,10 10,0 10,0 0))'))),
+  100.0, 0.001);
+
+-- NULL input
+CALL assert_eq_text(
+  'unaryunion: NULL returns NULL',
+  STX_Unaryunion(NULL),
+  NULL);
+
+-- =============================================================================
+-- STX_Clipbyrect (Phase 4d)
+-- =============================================================================
+
+-- Clip polygon by overlapping rectangle
+CALL assert_eq_text(
+  'clipbyrect: clipped polygon is POLYGON',
+  ST_GeometryType(STX_Clipbyrect(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    0, 0, 5, 5)),
+  'POLYGON');
+
+-- Clipped area is correct
+CALL assert_eq_double(
+  'clipbyrect: clipped area is 25',
+  ST_Area(STX_Clipbyrect(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    0, 0, 5, 5)),
+  25.0, 0.001);
+
+-- Polygon fully inside rect returns unchanged
+CALL assert_eq_double(
+  'clipbyrect: fully inside rect returns full area',
+  ST_Area(STX_Clipbyrect(
+    ST_GeomFromText('POLYGON((2 2, 8 2, 8 8, 2 8, 2 2))'),
+    0, 0, 10, 10)),
+  36.0, 0.001);
+
+-- Clip linestring
+CALL assert_eq_text(
+  'clipbyrect: linestring clip returns LINESTRING',
+  ST_GeometryType(STX_Clipbyrect(
+    ST_GeomFromText('LINESTRING(0 5, 10 5)'),
+    2, 0, 8, 10)),
+  'LINESTRING');
+
+-- Disjoint geometry returns empty
+CALL assert_eq_int(
+  'clipbyrect: disjoint returns empty (0 geometries)',
+  ST_NumGeometries(STX_Clipbyrect(
+    ST_GeomFromText('POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))'),
+    10, 10, 20, 20)),
+  0);
+
+-- NULL input
+CALL assert_eq_text(
+  'clipbyrect: NULL returns NULL',
+  STX_Clipbyrect(NULL, 0, 0, 10, 10),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

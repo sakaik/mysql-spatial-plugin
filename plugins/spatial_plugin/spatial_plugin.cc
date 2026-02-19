@@ -3613,6 +3613,144 @@ static void stx_node_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_simplifypreservetopology ------------------------------------------
+// Simplifies geometry using Douglas-Peucker while preserving topology.
+// Unlike ST_Simplify, this ensures polygons remain valid (no ring crossings).
+// stx_simplifypreservetopology(geom, tolerance)
+
+static bool stx_simplifypreservetopology_init(UDF_INIT *initid, UDF_ARGS *args,
+                                               char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg,
+           "stx_simplifypreservetopology() requires 2 arguments "
+           "(geom, tolerance)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_simplifypreservetopology(UDF_INIT *initid, UDF_ARGS *args,
+                                           char *result, unsigned long *length,
+                                           char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double tolerance = *reinterpret_cast<double *>(args->args[1]);
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr simplified(
+      GEOSTopologyPreserveSimplify_r(ctx, geom.get(), tolerance));
+  if (!simplified) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(simplified.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_simplifypreservetopology_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_unaryunion --------------------------------------------------------
+// Computes the union of all components of a geometry.
+// Useful for dissolving overlapping MultiPolygons or fixing invalid geometries.
+// stx_unaryunion(geom)
+
+static bool stx_unaryunion_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_unaryunion() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_unaryunion(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr unioned(GEOSUnaryUnion_r(ctx, geom.get()));
+  if (!unioned) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(unioned.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_unaryunion_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_clipbyrect --------------------------------------------------------
+// Fast clipping of a geometry by a 2D bounding box.
+// stx_clipbyrect(geom, xmin, ymin, xmax, ymax)
+
+static bool stx_clipbyrect_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 5) {
+    strcpy(msg,
+           "stx_clipbyrect() requires 5 arguments "
+           "(geom, xmin, ymin, xmax, ymax)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  args->arg_type[2] = REAL_RESULT;
+  args->arg_type[3] = REAL_RESULT;
+  args->arg_type[4] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_clipbyrect(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+  for (int i = 1; i <= 4; ++i) {
+    if (!args->args[i]) { *is_null = 1; return nullptr; }
+  }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double xmin = *reinterpret_cast<double *>(args->args[1]);
+  double ymin = *reinterpret_cast<double *>(args->args[2]);
+  double xmax = *reinterpret_cast<double *>(args->args[3]);
+  double ymax = *reinterpret_cast<double *>(args->args[4]);
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr clipped(
+      GEOSClipByRect_r(ctx, geom.get(), xmin, ymin, xmax, ymax));
+  if (!clipped) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(clipped.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_clipbyrect_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -3719,6 +3857,13 @@ static const udf_entry udf_table[] = {
      stx_sharedpaths_init, stx_sharedpaths_deinit},
     {"stx_node", STRING_RESULT, (Udf_func_any)stx_node, stx_node_init,
      stx_node_deinit},
+    {"stx_simplifypreservetopology", STRING_RESULT,
+     (Udf_func_any)stx_simplifypreservetopology,
+     stx_simplifypreservetopology_init, stx_simplifypreservetopology_deinit},
+    {"stx_unaryunion", STRING_RESULT, (Udf_func_any)stx_unaryunion,
+     stx_unaryunion_init, stx_unaryunion_deinit},
+    {"stx_clipbyrect", STRING_RESULT, (Udf_func_any)stx_clipbyrect,
+     stx_clipbyrect_init, stx_clipbyrect_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 
