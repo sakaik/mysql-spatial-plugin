@@ -3989,6 +3989,542 @@ static void stx_concavehullofpolygons_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_npoints -----------------------------------------------------------
+// Returns the total number of vertices in any geometry type.
+// Unlike MySQL's ST_NumPoints() which only works for LineString,
+// stx_npoints works for all geometry types (Point, LineString, Polygon,
+// Multi*, GeometryCollection).
+
+// Helper: count points from raw WKB (skipping 4-byte SRID prefix)
+static long long count_points_wkb(const char *data, size_t length) {
+  if (!data || length < 9) return -1;
+
+  const unsigned char *p = reinterpret_cast<const unsigned char *>(data + 4);
+  const unsigned char *end = reinterpret_cast<const unsigned char *>(data) + length;
+
+  // Read byte order
+  if (p >= end) return -1;
+  bool le = (*p == 0x01);
+  p++;
+
+  auto read_u32 = [&]() -> uint32_t {
+    if (p + 4 > end) return 0;
+    uint32_t v;
+    std::memcpy(&v, p, 4);
+    p += 4;
+    if (!le) v = __builtin_bswap32(v);
+    return v;
+  };
+
+  uint32_t type = read_u32();
+
+  switch (type) {
+    case 1:  // Point
+      return 1;
+    case 2: {  // LineString
+      uint32_t n = read_u32();
+      return static_cast<long long>(n);
+    }
+    case 3: {  // Polygon
+      uint32_t num_rings = read_u32();
+      long long total = 0;
+      for (uint32_t i = 0; i < num_rings; ++i) {
+        uint32_t n = read_u32();
+        total += n;
+        p += n * 16;  // skip coordinates (2 doubles per point)
+      }
+      return total;
+    }
+    case 4: {  // MultiPoint
+      uint32_t count = read_u32();
+      return static_cast<long long>(count);
+    }
+    case 5: {  // MultiLineString
+      uint32_t count = read_u32();
+      long long total = 0;
+      for (uint32_t i = 0; i < count; ++i) {
+        p++;  // byte order
+        p += 4;  // type
+        uint32_t n = read_u32();
+        total += n;
+        p += n * 16;
+      }
+      return total;
+    }
+    case 6: {  // MultiPolygon
+      uint32_t count = read_u32();
+      long long total = 0;
+      for (uint32_t i = 0; i < count; ++i) {
+        p++;  // byte order
+        p += 4;  // type
+        uint32_t num_rings = read_u32();
+        for (uint32_t j = 0; j < num_rings; ++j) {
+          uint32_t n = read_u32();
+          total += n;
+          p += n * 16;
+        }
+      }
+      return total;
+    }
+    case 7: {  // GeometryCollection - use GEOS for accurate counting
+      auto geom = mysql_to_geos(data, length);
+      if (!geom) return -1;
+      auto ctx = get_geos_context();
+      return static_cast<long long>(GEOSGetNumCoordinates_r(ctx, geom.get()));
+    }
+    default:
+      return -1;
+  }
+}
+
+static bool stx_npoints_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_npoints() requires 1 argument");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  return false;
+}
+
+static long long stx_npoints(UDF_INIT *, UDF_ARGS *args, char *is_null,
+                              char *error) {
+  if (!args->args[0]) { *is_null = 1; return 0; }
+  long long n = count_points_wkb(args->args[0], args->lengths[0]);
+  if (n < 0) { *error = 1; return 0; }
+  return n;
+}
+
+static void stx_npoints_deinit(UDF_INIT *) {}
+
+// ----- stx_makeline ----------------------------------------------------------
+// Creates a LineString from two Points or from a MultiPoint.
+// stx_makeline(point1, point2) -> LineString
+// stx_makeline(multipoint) -> LineString
+
+static bool stx_makeline_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 2) {
+    strcpy(msg,
+           "stx_makeline() requires 1 or 2 arguments "
+           "(multipoint) or (point1, point2)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count == 2) args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_makeline(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                           unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  if (args->arg_count == 2) {
+    // Two points -> LineString
+    if (!args->args[1]) { *is_null = 1; return nullptr; }
+
+    auto r1 = parse_geometry(args->args[0], args->lengths[0]);
+    auto r2 = parse_geometry(args->args[1], args->lengths[1]);
+    if (!r1 || !r2) { *error = 1; return nullptr; }
+    if (r1->type != GeometryType::Point || r2->type != GeometryType::Point) {
+      *error = 1; return nullptr;
+    }
+
+    std::string wkb;
+    if (auto *cv1 = std::get_if<CartesianVariant>(&r1->geometry)) {
+      auto *cv2 = std::get_if<CartesianVariant>(&r2->geometry);
+      if (!cv2) { *error = 1; return nullptr; }
+      auto &p1 = std::get<Point>(*cv1);
+      auto &p2 = std::get<Point>(*cv2);
+      Linestring ls;
+      ls.push_back(p1);
+      ls.push_back(p2);
+      wkb = write_linestring(r1->srid, ls);
+    } else if (auto *gv1 = std::get_if<GeographicVariant>(&r1->geometry)) {
+      auto *gv2 = std::get_if<GeographicVariant>(&r2->geometry);
+      if (!gv2) { *error = 1; return nullptr; }
+      auto &p1 = std::get<GeoPoint>(*gv1);
+      auto &p2 = std::get<GeoPoint>(*gv2);
+      GeoLinestring ls;
+      ls.push_back(p1);
+      ls.push_back(p2);
+      wkb = write_linestring(r1->srid, ls);
+    } else {
+      *error = 1; return nullptr;
+    }
+    return return_wkb(initid, wkb, result, length);
+
+  } else {
+    // Single argument: MultiPoint -> LineString
+    auto r = parse_geometry(args->args[0], args->lengths[0]);
+    if (!r) { *error = 1; return nullptr; }
+    if (r->type != GeometryType::MultiPoint) { *error = 1; return nullptr; }
+
+    std::string wkb;
+    if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+      auto &mp = std::get<MultiPoint>(*cv);
+      if (mp.size() < 2) { *error = 1; return nullptr; }
+      Linestring ls(mp.begin(), mp.end());
+      wkb = write_linestring(r->srid, ls);
+    } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+      auto &mp = std::get<GeoMultiPoint>(*gv);
+      if (mp.size() < 2) { *error = 1; return nullptr; }
+      GeoLinestring ls(mp.begin(), mp.end());
+      wkb = write_linestring(r->srid, ls);
+    } else {
+      *error = 1; return nullptr;
+    }
+    return return_wkb(initid, wkb, result, length);
+  }
+}
+
+static void stx_makeline_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_makepolygon -------------------------------------------------------
+// Creates a Polygon from a closed LineString (outer ring),
+// with optional inner rings as a MultiLineString.
+// stx_makepolygon(outer_ring) -> Polygon
+// stx_makepolygon(outer_ring, inner_rings_multilinestring) -> Polygon
+
+static bool stx_makepolygon_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 2) {
+    strcpy(msg,
+           "stx_makepolygon() requires 1 or 2 arguments "
+           "(outer_ring [, inner_rings])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count == 2) args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_makepolygon(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                              unsigned long *length, char *is_null,
+                              char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  auto r_outer = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r_outer || r_outer->type != GeometryType::LineString) {
+    *error = 1; return nullptr;
+  }
+
+  std::string wkb;
+  if (auto *cv = std::get_if<CartesianVariant>(&r_outer->geometry)) {
+    auto &outer_ls = std::get<Linestring>(*cv);
+    if (outer_ls.size() < 4) { *error = 1; return nullptr; }
+    Polygon poly;
+    poly.outer().assign(outer_ls.begin(), outer_ls.end());
+
+    if (args->arg_count == 2 && args->args[1]) {
+      auto r_inner = parse_geometry(args->args[1], args->lengths[1]);
+      if (!r_inner || r_inner->type != GeometryType::MultiLineString) {
+        *error = 1; return nullptr;
+      }
+      auto *cv_inner = std::get_if<CartesianVariant>(&r_inner->geometry);
+      if (!cv_inner) { *error = 1; return nullptr; }
+      auto &mls = std::get<MultiLinestring>(*cv_inner);
+      poly.inners().resize(mls.size());
+      for (size_t i = 0; i < mls.size(); ++i)
+        poly.inners()[i].assign(mls[i].begin(), mls[i].end());
+    }
+    bg::correct(poly);
+    wkb = write_polygon(r_outer->srid, poly);
+  } else if (auto *gv = std::get_if<GeographicVariant>(&r_outer->geometry)) {
+    auto &outer_ls = std::get<GeoLinestring>(*gv);
+    if (outer_ls.size() < 4) { *error = 1; return nullptr; }
+    GeoPolygon poly;
+    poly.outer().assign(outer_ls.begin(), outer_ls.end());
+
+    if (args->arg_count == 2 && args->args[1]) {
+      auto r_inner = parse_geometry(args->args[1], args->lengths[1]);
+      if (!r_inner || r_inner->type != GeometryType::MultiLineString) {
+        *error = 1; return nullptr;
+      }
+      auto *gv_inner = std::get_if<GeographicVariant>(&r_inner->geometry);
+      if (!gv_inner) { *error = 1; return nullptr; }
+      auto &mls = std::get<GeoMultiLinestring>(*gv_inner);
+      poly.inners().resize(mls.size());
+      for (size_t i = 0; i < mls.size(); ++i)
+        poly.inners()[i].assign(mls[i].begin(), mls[i].end());
+    }
+    bg::correct(poly);
+    wkb = write_polygon(r_outer->srid, poly);
+  } else {
+    *error = 1; return nullptr;
+  }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_makepolygon_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_points ------------------------------------------------------------
+// Extracts all vertices from any geometry type and returns them as MultiPoint.
+
+// Helper: collect points from raw WKB (skipping 4-byte SRID prefix)
+static bool collect_points_wkb(const char *data, size_t length,
+                                std::vector<std::pair<double, double>> &pts) {
+  if (!data || length < 9) return false;
+
+  const unsigned char *p = reinterpret_cast<const unsigned char *>(data + 4);
+  const unsigned char *end = reinterpret_cast<const unsigned char *>(data) + length;
+
+  if (p >= end) return false;
+  bool le = (*p == 0x01);
+  p++;
+
+  auto read_u32 = [&]() -> uint32_t {
+    if (p + 4 > end) return 0;
+    uint32_t v;
+    std::memcpy(&v, p, 4);
+    p += 4;
+    if (!le) v = __builtin_bswap32(v);
+    return v;
+  };
+
+  auto read_dbl = [&]() -> double {
+    if (p + 8 > end) return 0.0;
+    double v;
+    uint64_t raw;
+    std::memcpy(&raw, p, 8);
+    p += 8;
+    if (!le) {
+      raw = ((raw & 0x00000000FFFFFFFFull) << 32) |
+            ((raw & 0xFFFFFFFF00000000ull) >> 32);
+      raw = ((raw & 0x0000FFFF0000FFFFull) << 16) |
+            ((raw & 0xFFFF0000FFFF0000ull) >> 16);
+      raw = ((raw & 0x00FF00FF00FF00FFull) << 8) |
+            ((raw & 0xFF00FF00FF00FF00ull) >> 8);
+    }
+    std::memcpy(&v, &raw, 8);
+    return v;
+  };
+
+  auto read_point = [&]() {
+    double x = read_dbl();
+    double y = read_dbl();
+    pts.emplace_back(x, y);
+  };
+
+  uint32_t type = read_u32();
+
+  switch (type) {
+    case 1:  // Point
+      read_point();
+      return true;
+    case 2: {  // LineString
+      uint32_t n = read_u32();
+      for (uint32_t i = 0; i < n; ++i) read_point();
+      return true;
+    }
+    case 3: {  // Polygon
+      uint32_t num_rings = read_u32();
+      for (uint32_t i = 0; i < num_rings; ++i) {
+        uint32_t n = read_u32();
+        for (uint32_t j = 0; j < n; ++j) read_point();
+      }
+      return true;
+    }
+    case 4: {  // MultiPoint
+      uint32_t count = read_u32();
+      for (uint32_t i = 0; i < count; ++i) {
+        p++;  // byte order
+        p += 4;  // type
+        read_point();
+      }
+      return true;
+    }
+    case 5: {  // MultiLineString
+      uint32_t count = read_u32();
+      for (uint32_t i = 0; i < count; ++i) {
+        p++;  // byte order
+        p += 4;  // type
+        uint32_t n = read_u32();
+        for (uint32_t j = 0; j < n; ++j) read_point();
+      }
+      return true;
+    }
+    case 6: {  // MultiPolygon
+      uint32_t count = read_u32();
+      for (uint32_t i = 0; i < count; ++i) {
+        p++;  // byte order
+        p += 4;  // type
+        uint32_t num_rings = read_u32();
+        for (uint32_t j = 0; j < num_rings; ++j) {
+          uint32_t n = read_u32();
+          for (uint32_t k = 0; k < n; ++k) read_point();
+        }
+      }
+      return true;
+    }
+    case 7: {  // GeometryCollection - use GEOS
+      auto geom = mysql_to_geos(data, length);
+      if (!geom) return false;
+      auto ctx = get_geos_context();
+      const GEOSCoordSequence *cs = nullptr;
+      // Flatten via WKT round-trip is complex; use coordinate extraction
+      int ncoords = GEOSGetNumCoordinates_r(ctx, geom.get());
+      if (ncoords < 0) return false;
+      // Recursively extract from sub-geometries
+      int ngeoms = GEOSGetNumGeometries_r(ctx, geom.get());
+      for (int i = 0; i < ngeoms; ++i) {
+        const GEOSGeometry *sub = GEOSGetGeometryN_r(ctx, geom.get(), i);
+        if (!sub) continue;
+        auto sub_wkb = geos_to_mysql(sub, 0);
+        if (!sub_wkb.empty()) {
+          // Overwrite SRID with 0 (already done)
+          collect_points_wkb(sub_wkb.data(), sub_wkb.size(), pts);
+        }
+      }
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+static bool stx_points_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_points() requires 1 argument");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_points(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                         unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+
+  std::vector<std::pair<double, double>> pts;
+  if (!collect_points_wkb(args->args[0], args->lengths[0], pts)) {
+    *error = 1; return nullptr;
+  }
+
+  // Build MultiPoint WKB
+  std::string buf;
+  buf.reserve(4 + 5 + 4 + pts.size() * 21);
+  detail::append_uint32(buf, srid);
+  detail::append_wkb_header(buf, GeometryType::MultiPoint);
+  detail::append_uint32(buf, static_cast<uint32_t>(pts.size()));
+  for (const auto &[x, y] : pts) {
+    detail::append_wkb_header(buf, GeometryType::Point);
+    detail::append_double(buf, x);
+    detail::append_double(buf, y);
+  }
+
+  return return_wkb(initid, buf, result, length);
+}
+
+static void stx_points_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_isring ------------------------------------------------------------
+// Returns 1 if the LineString is a ring (closed and simple), 0 otherwise.
+// Uses GEOS GEOSisRing().
+
+static bool stx_isring_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_isring() requires 1 argument (linestring)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  return false;
+}
+
+static long long stx_isring(UDF_INIT *, UDF_ARGS *args, char *is_null,
+                             char *error) {
+  if (!args->args[0]) { *is_null = 1; return 0; }
+
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return 0; }
+
+  auto ctx = get_geos_context();
+
+  // GEOSisRing only works on LineString
+  int geom_type = GEOSGeomTypeId_r(ctx, geom.get());
+  if (geom_type != GEOS_LINESTRING) { *error = 1; return 0; }
+
+  char result = GEOSisRing_r(ctx, geom.get());
+  if (result == 2) { *error = 1; return 0; }  // GEOS error
+  return result ? 1 : 0;
+}
+
+static void stx_isring_deinit(UDF_INIT *) {}
+
+// ----- stx_shortestline ------------------------------------------------------
+// Returns the shortest line (LineString) between two geometries.
+// Uses GEOS GEOSNearestPoints().
+
+static bool stx_shortestline_init(UDF_INIT *initid, UDF_ARGS *args,
+                                   char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg, "stx_shortestline() requires 2 arguments");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_shortestline(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                               unsigned long *length, char *is_null,
+                               char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+
+  auto geom1 = mysql_to_geos(args->args[0], args->lengths[0]);
+  auto geom2 = mysql_to_geos(args->args[1], args->lengths[1]);
+  if (!geom1 || !geom2) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSCoordSequence *cs = GEOSNearestPoints_r(ctx, geom1.get(), geom2.get());
+  if (!cs) { *error = 1; return nullptr; }
+
+  double x1, y1, x2, y2;
+  GEOSCoordSeq_getX_r(ctx, cs, 0, &x1);
+  GEOSCoordSeq_getY_r(ctx, cs, 0, &y1);
+  GEOSCoordSeq_getX_r(ctx, cs, 1, &x2);
+  GEOSCoordSeq_getY_r(ctx, cs, 1, &y2);
+  GEOSCoordSeq_destroy_r(ctx, cs);
+
+  // Build a LineString WKB: SRID + header + 2 points
+  std::string buf;
+  buf.reserve(4 + 5 + 4 + 32);
+  detail::append_uint32(buf, srid);
+  detail::append_wkb_header(buf, GeometryType::LineString);
+  detail::append_uint32(buf, 2);
+  detail::append_double(buf, x1);
+  detail::append_double(buf, y1);
+  detail::append_double(buf, x2);
+  detail::append_double(buf, y2);
+
+  return return_wkb(initid, buf, result, length);
+}
+
+static void stx_shortestline_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -4115,6 +4651,19 @@ static const udf_entry udf_table[] = {
     {"stx_concavehullofpolygons", STRING_RESULT,
      (Udf_func_any)stx_concavehullofpolygons,
      stx_concavehullofpolygons_init, stx_concavehullofpolygons_deinit},
+    // Phase 5: constructor / property / distance functions
+    {"stx_npoints", INT_RESULT, (Udf_func_any)stx_npoints,
+     stx_npoints_init, stx_npoints_deinit},
+    {"stx_makeline", STRING_RESULT, (Udf_func_any)stx_makeline,
+     stx_makeline_init, stx_makeline_deinit},
+    {"stx_makepolygon", STRING_RESULT, (Udf_func_any)stx_makepolygon,
+     stx_makepolygon_init, stx_makepolygon_deinit},
+    {"stx_points", STRING_RESULT, (Udf_func_any)stx_points,
+     stx_points_init, stx_points_deinit},
+    {"stx_isring", INT_RESULT, (Udf_func_any)stx_isring,
+     stx_isring_init, stx_isring_deinit},
+    {"stx_shortestline", STRING_RESULT, (Udf_func_any)stx_shortestline,
+     stx_shortestline_init, stx_shortestline_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 
@@ -4171,7 +4720,7 @@ static int spatial_plugin_deinit(void *p [[maybe_unused]]) {
 // Status variables (SHOW STATUS LIKE 'spatial_plugin_%')
 // =============================================================================
 
-static char stx_function_list[1024];
+static char stx_function_list[2048];
 static long stx_function_count;
 
 static void build_status_info() {

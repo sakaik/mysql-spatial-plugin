@@ -89,6 +89,12 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Minimumwidth](#stx_minimumwidth) | GEOMETRY | 最小幅 / Minimum width of geometry (GEOS) |
 | [STX_Simplifypolygonhull](#stx_simplifypolygonhull) | GEOMETRY | ポリゴン Hull 簡略化 / Polygon hull simplification (GEOS) |
 | [STX_Concavehullofpolygons](#stx_concavehullofpolygons) | GEOMETRY | ポリゴン集合の凹包 / Concave hull of polygon set (GEOS) |
+| [STX_Npoints](#stx_npoints) | INTEGER | 全頂点数 / Total number of vertices |
+| [STX_Makeline](#stx_makeline) | GEOMETRY | LineString 構築 / Create LineString from points |
+| [STX_Makepolygon](#stx_makepolygon) | GEOMETRY | Polygon 構築 / Create Polygon from LineString |
+| [STX_Points](#stx_points) | GEOMETRY | 全頂点抽出 / Extract all vertices as MultiPoint |
+| [STX_Isring](#stx_isring) | INTEGER | 閉環判定 / Test if LineString is a ring (GEOS) |
+| [STX_Shortestline](#stx_shortestline) | GEOMETRY | 最短線分 / Shortest line between geometries (GEOS) |
 
 ---
 
@@ -2534,11 +2540,203 @@ ORDER BY UDF_NAME;
 | STX_Minimumwidth               | char            |
 | STX_Simplifypolygonhull        | char            |
 | STX_Concavehullofpolygons      | char            |
+| STX_Npoints                    | integer         |
+| STX_Makeline                   | char            |
+| STX_Makepolygon                | char            |
+| STX_Points                     | char            |
+| STX_Isring                     | integer         |
+| STX_Shortestline               | char            |
 +--------------------------------+-----------------+
 ```
 
 `UDF_RETURN_TYPE` が `char` の関数は、実際にはジオメトリのバイナリ（SRID + WKB）を返す。UDF の仕様上 GEOMETRY 型を直接返せないため `STRING_RESULT` で登録している。`ST_AsText()` 等に渡せばジオメトリとして正しく解釈される。
 Functions with `UDF_RETURN_TYPE = char` actually return geometry binary data (SRID + WKB). Due to the UDF specification, GEOMETRY cannot be used as a return type directly, so they are registered as `STRING_RESULT`. The returned values can be passed to `ST_AsText()` or other spatial functions and will be interpreted correctly as geometries.
+
+### STX_Npoints
+
+ジオメトリの全頂点数を返す。MySQL の `ST_NumPoints()` は LineString のみ対応だが、本関数は全ジオメトリ型に対応する。
+Returns the total number of vertices in any geometry type. Unlike MySQL's `ST_NumPoints()` which only works for LineString, this function supports all geometry types.
+
+```sql
+STX_Npoints(geometry) -> INTEGER
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象ジオメトリ（全型対応） / Target geometry (all types) |
+
+#### 使用例 (Examples)
+
+```sql
+SELECT STX_Npoints(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)'));
+-- 3
+
+SELECT STX_Npoints(ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0),(2 2,4 2,4 4,2 4,2 2))'));
+-- 10 (outer 5 + inner 5)
+```
+
+---
+
+### STX_Makeline
+
+2つの Point から、または MultiPoint から LineString を構築する。
+Creates a LineString from two Points, or from a MultiPoint.
+
+```sql
+STX_Makeline(point1, point2) -> GEOMETRY (LineString)
+STX_Makeline(multipoint)     -> GEOMETRY (LineString)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| point1, point2 | GEOMETRY (Point) | 始点と終点 / Start and end points |
+| multipoint | GEOMETRY (MultiPoint) | 頂点群（2点以上） / Set of vertices (2 or more) |
+
+#### 使用例 (Examples)
+
+```sql
+SELECT ST_AsText(STX_Makeline(
+  ST_GeomFromText('POINT(0 0)'),
+  ST_GeomFromText('POINT(1 1)')));
+-- LINESTRING(0 0,1 1)
+
+SELECT ST_AsText(STX_Makeline(
+  ST_GeomFromText('MULTIPOINT((0 0),(1 1),(2 2))')));
+-- LINESTRING(0 0,1 1,2 2)
+```
+
+---
+
+### STX_Makepolygon
+
+閉じた LineString から Polygon を構築する。オプションで内環（穴）を MultiLineString として指定可能。
+Creates a Polygon from a closed LineString (outer ring). Optionally, inner rings (holes) can be specified as a MultiLineString.
+
+```sql
+STX_Makepolygon(outer_ring)                -> GEOMETRY (Polygon)
+STX_Makepolygon(outer_ring, inner_rings)   -> GEOMETRY (Polygon)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| outer_ring | GEOMETRY (LineString) | 外環（閉じた LineString、4点以上） / Outer ring (closed, 4+ points) |
+| inner_rings | GEOMETRY (MultiLineString) | 内環群（オプション） / Inner rings (optional) |
+
+#### 使用例 (Examples)
+
+```sql
+SELECT ST_AsText(STX_Makepolygon(
+  ST_GeomFromText('LINESTRING(0 0,10 0,10 10,0 10,0 0)')));
+-- POLYGON((0 0,0 10,10 10,10 0,0 0))
+
+SELECT ST_AsText(STX_Makepolygon(
+  ST_GeomFromText('LINESTRING(0 0,10 0,10 10,0 10,0 0)'),
+  ST_GeomFromText('MULTILINESTRING((2 2,4 2,4 4,2 4,2 2))')));
+-- POLYGON((0 0,0 10,10 10,10 0,0 0),(2 2,4 2,4 4,2 4,2 2))
+```
+
+---
+
+### STX_Points
+
+ジオメトリの全頂点を MultiPoint として返す。
+Extracts all vertices from any geometry type and returns them as a MultiPoint.
+
+```sql
+STX_Points(geometry) -> GEOMETRY (MultiPoint)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象ジオメトリ（全型対応） / Target geometry (all types) |
+
+#### 使用例 (Examples)
+
+```sql
+SELECT ST_AsText(STX_Points(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)')));
+-- MULTIPOINT((0 0),(1 1),(2 2))
+
+SELECT ST_AsText(STX_Points(ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))')));
+-- MULTIPOINT((0 0),(10 0),(10 10),(0 10),(0 0))
+```
+
+---
+
+### STX_Isring
+
+LineString がリング（閉じていて自己交差がない）かどうかを判定する。GEOS `GEOSisRing()` を使用。
+Returns 1 if the LineString is a ring (closed and simple, i.e., no self-intersections), 0 otherwise. Uses GEOS `GEOSisRing()`.
+
+```sql
+STX_Isring(linestring) -> INTEGER (0 or 1)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| linestring | GEOMETRY (LineString) | 対象 LineString / Target LineString |
+
+#### 使用例 (Examples)
+
+```sql
+SELECT STX_Isring(ST_GeomFromText('LINESTRING(0 0,10 0,10 10,0 10,0 0)'));
+-- 1 (closed, simple → ring)
+
+SELECT STX_Isring(ST_GeomFromText('LINESTRING(0 0,1 1,2 2)'));
+-- 0 (not closed)
+
+SELECT STX_Isring(ST_GeomFromText('LINESTRING(0 0,2 0,0 2,2 2,0 0)'));
+-- 0 (closed but self-intersecting)
+```
+
+---
+
+### STX_Shortestline
+
+2つのジオメトリ間の最短線分を LineString として返す。GEOS `GEOSNearestPoints()` を使用。
+Returns the shortest line (LineString) between two geometries. Uses GEOS `GEOSNearestPoints()`.
+
+```sql
+STX_Shortestline(geometry1, geometry2) -> GEOMETRY (LineString)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry1 | GEOMETRY | ジオメトリ1 / First geometry |
+| geometry2 | GEOMETRY | ジオメトリ2 / Second geometry |
+
+#### 使用例 (Examples)
+
+```sql
+SELECT ST_AsText(STX_Shortestline(
+  ST_GeomFromText('POINT(0 0)'),
+  ST_GeomFromText('LINESTRING(1 1, 2 2)')));
+-- LINESTRING(0 0,1 1)
+
+-- The length of the shortest line equals the distance between geometries
+SELECT ST_Length(STX_Shortestline(
+  ST_GeomFromText('POINT(0 0)'),
+  ST_GeomFromText('POINT(3 4)')));
+-- 5 (= ST_Distance between the two points)
+```
+
+#### 備考 (Notes)
+
+- 既存の `STX_Closestpoint` は一方のジオメトリ上の最近接**点**を返すが、`STX_Shortestline` は両方のジオメトリ上の最近接点を結ぶ**線分**を返す。
+  `STX_Closestpoint` returns the nearest **point** on one geometry, while `STX_Shortestline` returns the **line segment** connecting the nearest points on both geometries.
+
+---
 
 ## アンインストール (Uninstallation)
 

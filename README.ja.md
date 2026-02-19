@@ -6,7 +6,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 距離クエリ、空間関係判定（DE-9IM）、座標変換、入出力フォーマット変換などの GIS 関数を提供します。Cartesian（平面直交座標系）と Geographic（WGS84 等の地理座標系）の両方に対応しています。
 
-## 関数一覧（51関数）
+## 関数一覧（57関数）
 
 ### 空間計測・述語
 
@@ -20,6 +20,8 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 |
 | `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す |
 | `STX_Relatematch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 |
+| `STX_Npoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） |
+| `STX_Isring(linestring)` | LineString がリング（閉環・非自己交差）か判定 |
 
 ### ジオメトリ処理
 
@@ -29,8 +31,12 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Linelocatepoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） |
 | `STX_Linesubstring(line, start, end)` | ラインの一部を抽出 |
 | `STX_Closestpoint(point, geom)` | ジオメトリ上の最近接点を返す |
+| `STX_Shortestline(g1, g2)` | 2つのジオメトリ間の最短線分を返す |
 | `STX_Pointonsurface(geom)` | ポリゴン内部の点を返す |
+| `STX_Points(geom)` | 全頂点を MultiPoint として抽出 |
 | `STX_Makepoint(x, y [, srid])` | 座標から POINT を構築 |
+| `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 |
+| `STX_Makepolygon(ring [, inner_rings])` | LineString から Polygon を構築 |
 | `STX_Generatepoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
 | `STX_Minimumboundingcircle(geom [, segs])` | 最小外接円（Polygon として返却） |
 | `STX_Squaregrid(size, geom)` | バウンディングボックスを覆う矩形グリッド |
@@ -137,7 +143,7 @@ make install    # .so を MySQL プラグインディレクトリにコピー
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-全51関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
+全57関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
 -- 確認
@@ -193,7 +199,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## テスト
 
 ```bash
-make test       # テストスイートを実行（257テスト）
+make test       # テストスイートを実行（291テスト）
 ```
 
 ## ライセンス

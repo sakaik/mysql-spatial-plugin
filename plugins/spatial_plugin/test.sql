@@ -1949,6 +1949,222 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- stx_npoints
+-- =============================================================================
+
+CALL assert_eq_int(
+  'npoints: Point',
+  stx_npoints(ST_GeomFromText('POINT(1 2)')),
+  1);
+
+CALL assert_eq_int(
+  'npoints: LineString 3 points',
+  stx_npoints(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)')),
+  3);
+
+CALL assert_eq_int(
+  'npoints: Polygon (5 vertices including closing)',
+  stx_npoints(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')),
+  5);
+
+CALL assert_eq_int(
+  'npoints: Polygon with hole (outer 5 + inner 5)',
+  stx_npoints(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0),(2 2, 4 2, 4 4, 2 4, 2 2))')),
+  10);
+
+CALL assert_eq_int(
+  'npoints: MultiPoint 3 points',
+  stx_npoints(ST_GeomFromText('MULTIPOINT((0 0),(1 1),(2 2))')),
+  3);
+
+CALL assert_eq_int(
+  'npoints: MultiLineString (2 + 3 = 5)',
+  stx_npoints(ST_GeomFromText('MULTILINESTRING((0 0, 1 1),(2 2, 3 3, 4 4))')),
+  5);
+
+CALL assert_eq_int(
+  'npoints: MultiPolygon (5 + 5 = 10)',
+  stx_npoints(ST_GeomFromText('MULTIPOLYGON(((0 0, 10 0, 10 10, 0 10, 0 0)),((20 20, 30 20, 30 30, 20 30, 20 20)))')),
+  10);
+
+CALL assert_eq_int(
+  'npoints: NULL returns NULL',
+  stx_npoints(NULL),
+  NULL);
+
+-- =============================================================================
+-- stx_makeline
+-- =============================================================================
+
+CALL assert_eq_text(
+  'makeline: two points',
+  ST_AsText(stx_makeline(
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(1 1)'))),
+  'LINESTRING(0 0,1 1)');
+
+CALL assert_eq_text(
+  'makeline: from MultiPoint',
+  ST_AsText(stx_makeline(ST_GeomFromText('MULTIPOINT((0 0),(1 1),(2 2))'))),
+  'LINESTRING(0 0,1 1,2 2)');
+
+CALL assert_eq_text(
+  'makeline: two points with SRID',
+  ST_AsText(stx_makeline(
+    ST_GeomFromText('POINT(0 0)', 4326),
+    ST_GeomFromText('POINT(1 1)', 4326))),
+  'LINESTRING(0 0,1 1)');
+
+-- Verify SRID preserved
+CALL assert_eq_int(
+  'makeline: SRID preserved',
+  ST_SRID(stx_makeline(
+    ST_GeomFromText('POINT(0 0)', 4326),
+    ST_GeomFromText('POINT(1 1)', 4326))),
+  4326);
+
+CALL assert_eq_text(
+  'makeline: NULL returns NULL',
+  ST_AsText(stx_makeline(NULL, ST_GeomFromText('POINT(1 1)'))),
+  NULL);
+
+-- =============================================================================
+-- stx_makepolygon
+-- =============================================================================
+
+CALL assert_eq_text(
+  'makepolygon: simple polygon from linestring',
+  ST_GeometryType(stx_makepolygon(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10, 0 10, 0 0)'))),
+  'POLYGON');
+
+CALL assert_eq_int(
+  'makepolygon: result has correct number of points',
+  stx_npoints(stx_makepolygon(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10, 0 10, 0 0)'))),
+  5);
+
+CALL assert_eq_text(
+  'makepolygon: with hole',
+  ST_GeometryType(stx_makepolygon(
+    ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10, 0 10, 0 0)'),
+    ST_GeomFromText('MULTILINESTRING((2 2, 4 2, 4 4, 2 4, 2 2))'))),
+  'POLYGON');
+
+CALL assert_eq_int(
+  'makepolygon: with hole has correct number of points',
+  stx_npoints(stx_makepolygon(
+    ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10, 0 10, 0 0)'),
+    ST_GeomFromText('MULTILINESTRING((2 2, 4 2, 4 4, 2 4, 2 2))'))),
+  10);
+
+CALL assert_eq_int(
+  'makepolygon: SRID preserved',
+  ST_SRID(stx_makepolygon(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10, 0 10, 0 0)', 4326))),
+  4326);
+
+CALL assert_eq_text(
+  'makepolygon: NULL returns NULL',
+  ST_AsText(stx_makepolygon(NULL)),
+  NULL);
+
+-- =============================================================================
+-- stx_points
+-- =============================================================================
+
+CALL assert_eq_text(
+  'points: LineString vertices as MultiPoint',
+  ST_AsText(stx_points(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)'))),
+  'MULTIPOINT((0 0),(1 1),(2 2))');
+
+CALL assert_eq_text(
+  'points: Point returns single MultiPoint',
+  ST_AsText(stx_points(ST_GeomFromText('POINT(5 10)'))),
+  'MULTIPOINT((5 10))');
+
+CALL assert_eq_int(
+  'points: Polygon vertices count matches npoints',
+  stx_npoints(stx_points(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  5);
+
+CALL assert_eq_text(
+  'points: result type is MULTIPOINT',
+  ST_GeometryType(stx_points(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  'MULTIPOINT');
+
+CALL assert_eq_int(
+  'points: SRID preserved',
+  ST_SRID(stx_points(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326))),
+  4326);
+
+CALL assert_eq_text(
+  'points: NULL returns NULL',
+  ST_AsText(stx_points(NULL)),
+  NULL);
+
+-- =============================================================================
+-- stx_isring
+-- =============================================================================
+
+CALL assert_eq_int(
+  'isring: closed simple ring returns 1',
+  stx_isring(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10, 0 10, 0 0)')),
+  1);
+
+CALL assert_eq_int(
+  'isring: open linestring returns 0',
+  stx_isring(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)')),
+  0);
+
+CALL assert_eq_int(
+  'isring: self-crossing closed linestring returns 0',
+  stx_isring(ST_GeomFromText('LINESTRING(0 0, 2 0, 0 2, 2 2, 0 0)')),
+  0);
+
+CALL assert_eq_int(
+  'isring: NULL returns NULL',
+  stx_isring(NULL),
+  NULL);
+
+-- =============================================================================
+-- stx_shortestline
+-- =============================================================================
+
+CALL assert_eq_text(
+  'shortestline: point to linestring',
+  ST_AsText(stx_shortestline(
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('LINESTRING(1 1, 2 2)'))),
+  'LINESTRING(0 0,1 1)');
+
+CALL assert_eq_text(
+  'shortestline: result type is LINESTRING',
+  ST_GeometryType(stx_shortestline(
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(3 4)'))),
+  'LINESTRING');
+
+CALL assert_eq_double(
+  'shortestline: length matches ST_Distance',
+  ST_Distance(
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(3 4)')),
+  ST_Length(stx_shortestline(
+    ST_GeomFromText('POINT(0 0)'),
+    ST_GeomFromText('POINT(3 4)'))),
+  0.0001);
+
+CALL assert_eq_int(
+  'shortestline: SRID preserved',
+  ST_SRID(stx_shortestline(
+    ST_GeomFromText('POINT(0 0)', 4326),
+    ST_GeomFromText('POINT(1 1)', 4326))),
+  4326);
+
+CALL assert_eq_text(
+  'shortestline: NULL returns NULL',
+  ST_AsText(stx_shortestline(NULL, ST_GeomFromText('POINT(1 1)'))),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 
