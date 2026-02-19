@@ -6,7 +6,7 @@
 
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
-| `STX_Perimeter(geom)` | Polygon/MultiPolygon の周長 | |
+| `STX_Perimeter(geom)` | Polygon/MultiPolygon の周長 | https://sakaik.hateblo.jp/entry/20260219/STX_Perimeter_func |
 | `STX_Coveredby(g1, g2)` | g1 が g2 に覆われているか判定 | |
 | `STX_Covers(g1, g2)` | g1 が g2 を覆っているか判定 | |
 | `STX_Dwithin(g1, g2, dist)` | 2つのジオメトリ間の距離が閾値以内か判定 | |

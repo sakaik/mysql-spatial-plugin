@@ -395,7 +395,7 @@ static bool stx_perimeter_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
   }
   args->arg_type[0] = STRING_RESULT;
   initid->maybe_null = 1;
-  initid->decimals = 15;
+  initid->decimals = 31;  // DECIMAL_NOT_SPECIFIED — auto-trim trailing zeros
   return false;
 }
 
@@ -528,7 +528,7 @@ static bool stx_azimuth_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
   args->arg_type[0] = STRING_RESULT;
   args->arg_type[1] = STRING_RESULT;
   initid->maybe_null = 1;
-  initid->decimals = 15;
+  initid->decimals = 31;  // DECIMAL_NOT_SPECIFIED — auto-trim trailing zeros
   return false;
 }
 
@@ -647,7 +647,7 @@ static bool stx_linelocatepoint_init(UDF_INIT *initid, UDF_ARGS *args,
   args->arg_type[0] = STRING_RESULT;
   args->arg_type[1] = STRING_RESULT;
   initid->maybe_null = 1;
-  initid->decimals = 15;
+  initid->decimals = 31;  // DECIMAL_NOT_SPECIFIED — auto-trim trailing zeros
   return false;
 }
 
@@ -773,7 +773,7 @@ static bool stx_angle_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
   args->arg_type[1] = STRING_RESULT;
   args->arg_type[2] = STRING_RESULT;
   initid->maybe_null = 1;
-  initid->decimals = 15;
+  initid->decimals = 31;  // DECIMAL_NOT_SPECIFIED — auto-trim trailing zeros
   return false;
 }
 
