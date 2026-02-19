@@ -3751,6 +3751,244 @@ static void stx_clipbyrect_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_reduceprecision ---------------------------------------------------
+// Reduces coordinate precision while maintaining geometry validity.
+// Unlike stx_snaptogrid, collapsed geometry elements are removed and the
+// result is guaranteed to be topologically valid.
+// stx_reduceprecision(geom, gridsize)
+
+static bool stx_reduceprecision_init(UDF_INIT *initid, UDF_ARGS *args,
+                                      char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg,
+           "stx_reduceprecision() requires 2 arguments (geom, gridsize)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_reduceprecision(UDF_INIT *initid, UDF_ARGS *args,
+                                  char *result, unsigned long *length,
+                                  char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double gridsize = *reinterpret_cast<double *>(args->args[1]);
+
+  auto ctx = get_geos_context();
+  // flags=0: GEOS_PREC_VALID_OUTPUT (default, guarantees valid output)
+  GEOSGeomPtr reduced(
+      GEOSGeom_setPrecision_r(ctx, geom.get(), gridsize, 0));
+  if (!reduced) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(reduced.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_reduceprecision_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_maximuminscribedcircle --------------------------------------------
+// Computes the maximum inscribed circle of a geometry.
+// Returns a LineString from the center to the nearest boundary point.
+// stx_maximuminscribedcircle(geom, tolerance)
+
+static bool stx_maximuminscribedcircle_init(UDF_INIT *initid, UDF_ARGS *args,
+                                             char *msg) {
+  if (args->arg_count != 2) {
+    strcpy(msg,
+           "stx_maximuminscribedcircle() requires 2 arguments "
+           "(geom, tolerance)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_maximuminscribedcircle(UDF_INIT *initid, UDF_ARGS *args,
+                                         char *result, unsigned long *length,
+                                         char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double tolerance = *reinterpret_cast<double *>(args->args[1]);
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr circle(
+      GEOSMaximumInscribedCircle_r(ctx, geom.get(), tolerance));
+  if (!circle) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(circle.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_maximuminscribedcircle_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_minimumwidth ------------------------------------------------------
+// Returns a LineString representing the minimum width of a geometry.
+// The length of the returned LineString is the minimum diameter.
+// stx_minimumwidth(geom)
+
+static bool stx_minimumwidth_init(UDF_INIT *initid, UDF_ARGS *args,
+                                   char *msg) {
+  if (args->arg_count != 1) {
+    strcpy(msg, "stx_minimumwidth() requires 1 argument (geom)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_minimumwidth(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                               unsigned long *length, char *is_null,
+                               char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr width(GEOSMinimumWidth_r(ctx, geom.get()));
+  if (!width) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(width.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_minimumwidth_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_simplifypolygonhull -----------------------------------------------
+// Computes a simplified hull of a polygonal geometry.
+// vertex_fraction: 1.0 = original, 0.0 = minimal (outer=convex hull, inner=triangle).
+// is_outer: 1 = outer hull (default), 0 = inner hull.
+// stx_simplifypolygonhull(geom, vertex_fraction [, is_outer])
+
+static bool stx_simplifypolygonhull_init(UDF_INIT *initid, UDF_ARGS *args,
+                                          char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_simplifypolygonhull() requires 2-3 arguments "
+           "(geom, vertex_fraction [, is_outer])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count >= 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_simplifypolygonhull(UDF_INIT *initid, UDF_ARGS *args,
+                                      char *result, unsigned long *length,
+                                      char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double vertex_fraction = *reinterpret_cast<double *>(args->args[1]);
+
+  unsigned int is_outer = 1;  // default: outer hull
+  if (args->arg_count >= 3 && args->args[2])
+    is_outer = (*reinterpret_cast<long long *>(args->args[2])) ? 1 : 0;
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr hull(
+      GEOSPolygonHullSimplify_r(ctx, geom.get(), is_outer, vertex_fraction));
+  if (!hull) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(hull.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_simplifypolygonhull_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
+// ----- stx_concavehullofpolygons ---------------------------------------------
+// Computes the concave hull of a set of polygons.
+// Polygons are treated as constraints (the hull contains them).
+// stx_concavehullofpolygons(geom, ratio [, allow_holes])
+
+static bool stx_concavehullofpolygons_init(UDF_INIT *initid, UDF_ARGS *args,
+                                            char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 3) {
+    strcpy(msg,
+           "stx_concavehullofpolygons() requires 2-3 arguments "
+           "(geom, ratio [, allow_holes])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  if (args->arg_count >= 3) args->arg_type[2] = INT_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_concavehullofpolygons(UDF_INIT *initid, UDF_ARGS *args,
+                                        char *result, unsigned long *length,
+                                        char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
+
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
+
+  double ratio = *reinterpret_cast<double *>(args->args[1]);
+
+  // isTight=1: the hull tightly follows the input polygons
+  unsigned int is_tight = 1;
+  unsigned int allow_holes = 0;
+  if (args->arg_count >= 3 && args->args[2])
+    allow_holes = (*reinterpret_cast<long long *>(args->args[2])) ? 1 : 0;
+
+  auto ctx = get_geos_context();
+  GEOSGeomPtr hull(GEOSConcaveHullOfPolygons_r(ctx, geom.get(), ratio,
+                                                 is_tight, allow_holes));
+  if (!hull) { *error = 1; return nullptr; }
+
+  auto wkb = geos_to_mysql(hull.get(), srid);
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_concavehullofpolygons_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -3864,6 +4102,19 @@ static const udf_entry udf_table[] = {
      stx_unaryunion_init, stx_unaryunion_deinit},
     {"stx_clipbyrect", STRING_RESULT, (Udf_func_any)stx_clipbyrect,
      stx_clipbyrect_init, stx_clipbyrect_deinit},
+    {"stx_reduceprecision", STRING_RESULT, (Udf_func_any)stx_reduceprecision,
+     stx_reduceprecision_init, stx_reduceprecision_deinit},
+    {"stx_maximuminscribedcircle", STRING_RESULT,
+     (Udf_func_any)stx_maximuminscribedcircle,
+     stx_maximuminscribedcircle_init, stx_maximuminscribedcircle_deinit},
+    {"stx_minimumwidth", STRING_RESULT, (Udf_func_any)stx_minimumwidth,
+     stx_minimumwidth_init, stx_minimumwidth_deinit},
+    {"stx_simplifypolygonhull", STRING_RESULT,
+     (Udf_func_any)stx_simplifypolygonhull,
+     stx_simplifypolygonhull_init, stx_simplifypolygonhull_deinit},
+    {"stx_concavehullofpolygons", STRING_RESULT,
+     (Udf_func_any)stx_concavehullofpolygons,
+     stx_concavehullofpolygons_init, stx_concavehullofpolygons_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

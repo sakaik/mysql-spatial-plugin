@@ -6,7 +6,7 @@ Motto: *"Imperfect beats unavailable."*
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports both Cartesian and Geographic (WGS84) coordinate systems.
 
-## Functions (46)
+## Functions (51)
 
 ### Spatial Measurement & Predicates
 
@@ -67,6 +67,11 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | `STX_Simplifypreservetopology(geom, tol)` | Topology-preserving simplification |
 | `STX_Unaryunion(geom)` | Union of all components of a geometry |
 | `STX_Clipbyrect(geom, xmin, ymin, xmax, ymax)` | Fast clipping by rectangle |
+| `STX_Reduceprecision(geom, gridsize)` | Reduce coordinate precision (validity preserving) |
+| `STX_Maximuminscribedcircle(geom, tolerance)` | Maximum inscribed circle |
+| `STX_Minimumwidth(geom)` | Minimum width of a geometry |
+| `STX_Simplifypolygonhull(geom, frac [, is_outer])` | Polygon hull simplification |
+| `STX_Concavehullofpolygons(geom, ratio [, holes])` | Concave hull of polygon set |
 
 ### I/O Format Conversion
 
@@ -132,7 +137,7 @@ make install    # Copy .so to MySQL plugin directory
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-All 46 functions are registered automatically. No `CREATE FUNCTION` needed.
+All 51 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
 -- Verify
@@ -188,7 +193,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## Tests
 
 ```bash
-make test       # Run test suite (236 tests)
+make test       # Run test suite (257 tests)
 ```
 
 ## License

@@ -1789,6 +1789,166 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- STX_Reduceprecision (Phase 4e)
+-- =============================================================================
+
+-- Basic precision reduction
+CALL assert_eq_text(
+  'reduceprecision: point rounded to 0.01',
+  ST_AsText(STX_Reduceprecision(ST_GeomFromText('POINT(1.23456 2.34567)'), 0.01)),
+  'POINT(1.23 2.35)');
+
+-- Gridsize=1 rounds to integer
+CALL assert_eq_text(
+  'reduceprecision: gridsize=1 rounds to integer',
+  ST_AsText(STX_Reduceprecision(ST_GeomFromText('POINT(1.7 2.3)'), 1)),
+  'POINT(2 2)');
+
+-- Polygon stays valid after reduction
+CALL assert_eq_text(
+  'reduceprecision: polygon stays POLYGON',
+  ST_GeometryType(STX_Reduceprecision(
+    ST_GeomFromText('POLYGON((0.1 0.1, 9.9 0.1, 9.9 9.9, 0.1 9.9, 0.1 0.1))'), 1)),
+  'POLYGON');
+
+-- NULL input
+CALL assert_eq_text(
+  'reduceprecision: NULL returns NULL',
+  STX_Reduceprecision(NULL, 1),
+  NULL);
+
+-- =============================================================================
+-- STX_Maximuminscribedcircle (Phase 4e)
+-- =============================================================================
+
+-- Returns a LINESTRING (center to nearest boundary)
+CALL assert_eq_text(
+  'maximuminscribedcircle: returns LINESTRING',
+  ST_GeometryType(STX_Maximuminscribedcircle(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 0.1)),
+  'LINESTRING');
+
+-- 2 points in result (center and nearest boundary)
+CALL assert_eq_int(
+  'maximuminscribedcircle: result has 2 points',
+  ST_NumPoints(STX_Maximuminscribedcircle(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 0.1)),
+  2);
+
+-- Center of a square should be near (5,5), radius ~5
+CALL assert_eq_double(
+  'maximuminscribedcircle: square center X near 5',
+  ST_X(ST_StartPoint(STX_Maximuminscribedcircle(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 0.01))),
+  5.0, 0.1);
+
+-- Length of result = radius of inscribed circle
+CALL assert_eq_double(
+  'maximuminscribedcircle: square radius near 5',
+  ST_Length(STX_Maximuminscribedcircle(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 0.01)),
+  5.0, 0.1);
+
+-- NULL input
+CALL assert_eq_text(
+  'maximuminscribedcircle: NULL returns NULL',
+  STX_Maximuminscribedcircle(NULL, 1),
+  NULL);
+
+-- =============================================================================
+-- STX_Minimumwidth (Phase 4e)
+-- =============================================================================
+
+-- Returns a LINESTRING
+CALL assert_eq_text(
+  'minimumwidth: returns LINESTRING',
+  ST_GeometryType(STX_Minimumwidth(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 0 5, 0 0))'))),
+  'LINESTRING');
+
+-- Minimum width of 10x5 rectangle = 5
+CALL assert_eq_double(
+  'minimumwidth: 10x5 rectangle width is 5',
+  ST_Length(STX_Minimumwidth(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 0 5, 0 0))'))),
+  5.0, 0.001);
+
+-- Minimum width of a square = side length
+CALL assert_eq_double(
+  'minimumwidth: 10x10 square width is 10',
+  ST_Length(STX_Minimumwidth(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+  10.0, 0.001);
+
+-- NULL input
+CALL assert_eq_text(
+  'minimumwidth: NULL returns NULL',
+  STX_Minimumwidth(NULL),
+  NULL);
+
+-- =============================================================================
+-- STX_Simplifypolygonhull (Phase 4e)
+-- =============================================================================
+
+-- vertex_fraction=1.0 returns original (same point count)
+CALL assert_eq_int(
+  'simplifypolygonhull: fraction=1.0 preserves points',
+  ST_NumPoints(ST_ExteriorRing(STX_Simplifypolygonhull(
+    ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 1.0))),
+  7);
+
+-- vertex_fraction=0.0 outer hull = convex hull (fewer points)
+CALL assert_eq_int(
+  'simplifypolygonhull: fraction=0 outer hull = convex hull',
+  ST_NumPoints(ST_ExteriorRing(STX_Simplifypolygonhull(
+    ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 0.0))),
+  5);
+
+-- Inner hull (is_outer=0) has fewer or equal points
+CALL assert_eq_text(
+  'simplifypolygonhull: inner hull is POLYGON',
+  ST_GeometryType(STX_Simplifypolygonhull(
+    ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 0.5, 0)),
+  'POLYGON');
+
+-- NULL input
+CALL assert_eq_text(
+  'simplifypolygonhull: NULL returns NULL',
+  STX_Simplifypolygonhull(NULL, 0.5),
+  NULL);
+
+-- =============================================================================
+-- STX_Concavehullofpolygons (Phase 4e)
+-- =============================================================================
+
+-- Two disjoint polygons -> enclosing polygon
+CALL assert_eq_text(
+  'concavehullofpolygons: result is POLYGON',
+  ST_GeometryType(STX_Concavehullofpolygons(ST_GeomFromText(
+    'MULTIPOLYGON(((0 0,5 0,5 5,0 5,0 0)),((10 10,15 10,15 15,10 15,10 10)))'), 1.0)),
+  'POLYGON');
+
+-- Hull area >= sum of input areas
+CALL assert_eq_int(
+  'concavehullofpolygons: hull area >= input area',
+  ST_Area(STX_Concavehullofpolygons(ST_GeomFromText(
+    'MULTIPOLYGON(((0 0,5 0,5 5,0 5,0 0)),((10 10,15 10,15 15,10 15,10 10)))'), 1.0)) >= 50,
+  1);
+
+-- allow_holes parameter
+CALL assert_eq_text(
+  'concavehullofpolygons: allow_holes returns POLYGON',
+  ST_GeometryType(STX_Concavehullofpolygons(ST_GeomFromText(
+    'MULTIPOLYGON(((0 0,10 0,10 10,0 10,0 0)),((20 0,30 0,30 10,20 10,20 0)))'), 0.5, 1)),
+  'POLYGON');
+
+-- NULL input
+CALL assert_eq_text(
+  'concavehullofpolygons: NULL returns NULL',
+  STX_Concavehullofpolygons(NULL, 0.5),
+  NULL);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

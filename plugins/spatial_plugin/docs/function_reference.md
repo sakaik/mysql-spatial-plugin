@@ -84,6 +84,11 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Simplifypreservetopology](#stx_simplifypreservetopology) | GEOMETRY | トポロジ保持簡略化 / Topology-preserving simplification (GEOS) |
 | [STX_Unaryunion](#stx_unaryunion) | GEOMETRY | 構成要素の Union / Union of all components (GEOS) |
 | [STX_Clipbyrect](#stx_clipbyrect) | GEOMETRY | 矩形クリッピング / Fast rectangle clipping (GEOS) |
+| [STX_Reduceprecision](#stx_reduceprecision) | GEOMETRY | 精度削減 / Reduce coordinate precision (GEOS) |
+| [STX_Maximuminscribedcircle](#stx_maximuminscribedcircle) | GEOMETRY | 最大内接円 / Maximum inscribed circle (GEOS) |
+| [STX_Minimumwidth](#stx_minimumwidth) | GEOMETRY | 最小幅 / Minimum width of geometry (GEOS) |
+| [STX_Simplifypolygonhull](#stx_simplifypolygonhull) | GEOMETRY | ポリゴン Hull 簡略化 / Polygon hull simplification (GEOS) |
+| [STX_Concavehullofpolygons](#stx_concavehullofpolygons) | GEOMETRY | ポリゴン集合の凹包 / Concave hull of polygon set (GEOS) |
 
 ---
 
@@ -2240,14 +2245,229 @@ SELECT ST_Area(STX_Clipbyrect(
 
 ---
 
+### STX_Reduceprecision
+
+ジオメトリの座標精度を削減する。`STX_Snaptogrid` と異なり、結果のジオメトリの妥当性を保証する。
+Reduces coordinate precision of a geometry. Unlike `STX_Snaptogrid`, guarantees the validity of the result.
+
+```sql
+STX_Reduceprecision(geometry, gridsize) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+| gridsize | DOUBLE | グリッドサイズ（座標の丸め精度）/ Grid size (coordinate rounding precision) |
+
+#### 備考 (Notes)
+
+- `STX_Snaptogrid` の上位互換。座標を丸めた後にトポロジを修復するため、結果は常に有効なジオメトリとなる / Superior to `STX_Snaptogrid`: repairs topology after rounding, ensuring valid output
+- gridsize = 0 の場合は座標を変更しない / gridsize = 0 leaves coordinates unchanged
+
+#### 使用例 (Examples)
+
+```sql
+-- 座標を整数に丸め / Round coordinates to integers
+SELECT ST_AsText(STX_Reduceprecision(
+  ST_GeomFromText('POINT(1.23 4.56)'), 1));
+-- POINT(1 5)
+
+-- ポリゴンも妥当性を保持 / Polygon remains valid
+SELECT ST_GeometryType(STX_Reduceprecision(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 1));
+-- POLYGON
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_ReducePrecision()`
+- MySQL 標準: なし
+
+---
+
+### STX_Maximuminscribedcircle
+
+ポリゴン内部に収まる最大の円（最大内接円）の中心と半径を返す。結果は中心から最近接境界点への LineString。
+Returns the largest circle that fits inside a polygon. Result is a LineString from the center to the nearest boundary point.
+
+```sql
+STX_Maximuminscribedcircle(geometry, tolerance) -> GEOMETRY (LineString)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | Polygon または MultiPolygon / Polygon or MultiPolygon |
+| tolerance | DOUBLE | 計算精度（小さいほど精密だが遅い）/ Computation tolerance (smaller = more precise but slower) |
+
+#### 戻り値 (Return Value)
+
+2点の LineString。始点が円の中心、終点が最近接境界点。始点と終点の距離が内接円の半径。
+A 2-point LineString. Start point = circle center, end point = nearest boundary point. The distance between them is the inscribed circle radius.
+
+#### 使用例 (Examples)
+
+```sql
+-- 10x10 正方形の最大内接円 → 中心 (5,5)、半径 5
+-- Maximum inscribed circle of 10x10 square → center (5,5), radius 5
+SELECT ST_AsText(STX_Maximuminscribedcircle(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 0.01));
+-- LINESTRING(5 5,5 0)  (approximately)
+
+-- 半径の取得 / Get radius
+SELECT ST_Length(STX_Maximuminscribedcircle(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 0.01));
+-- ~5.0
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_MaximumInscribedCircle()`
+- MySQL 標準: なし
+
+---
+
+### STX_Minimumwidth
+
+ジオメトリの最小幅を表す LineString を返す。最小幅とは、ジオメトリを完全に含む平行な2直線間の最短距離。
+Returns a LineString representing the minimum width of a geometry — the shortest distance between two parallel lines that fully contain the geometry.
+
+```sql
+STX_Minimumwidth(geometry) -> GEOMETRY (LineString)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
+
+#### 戻り値 (Return Value)
+
+最小幅を表す LineString。長さが最小幅の値。
+A LineString representing the minimum width. Its length equals the minimum width value.
+
+#### 使用例 (Examples)
+
+```sql
+-- 10x5 長方形の最小幅 → 5
+-- Minimum width of 10x5 rectangle → 5
+SELECT ST_Length(STX_Minimumwidth(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 0 5, 0 0))')));
+-- 5
+
+-- 10x10 正方形の最小幅 → 10
+-- Minimum width of 10x10 square → 10
+SELECT ST_Length(STX_Minimumwidth(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- 10
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: なし（GEOS 固有機能）/ None (GEOS-specific feature)
+- MySQL 標準: なし
+
+---
+
+### STX_Simplifypolygonhull
+
+ポリゴンの外形を簡略化して、元のポリゴンを包含（outer hull）または内包（inner hull）するポリゴンを返す。
+Simplifies a polygon to a hull that contains (outer) or is contained by (inner) the original polygon.
+
+```sql
+STX_Simplifypolygonhull(geometry, vertex_fraction [, is_outer]) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | Polygon または MultiPolygon / Polygon or MultiPolygon |
+| vertex_fraction | DOUBLE | 保持する頂点の割合。0.0=最大簡略化、1.0=変更なし / Fraction of vertices to retain. 0.0=max simplification, 1.0=no change |
+| is_outer | INTEGER | 1: 外側 Hull（デフォルト）、0: 内側 Hull / 1: outer hull (default), 0: inner hull |
+
+#### 備考 (Notes)
+
+- outer hull（is_outer=1）: 元のポリゴンを完全に包含する簡略化ポリゴン / Outer hull: simplified polygon that fully contains the original
+- inner hull（is_outer=0）: 元のポリゴンに完全に内包される簡略化ポリゴン / Inner hull: simplified polygon fully contained by the original
+
+#### 使用例 (Examples)
+
+```sql
+-- fraction=1.0 で全頂点保持 / Keep all vertices with fraction=1.0
+SELECT ST_NumPoints(ST_ExteriorRing(STX_Simplifypolygonhull(
+  ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 1.0)));
+-- 7 (unchanged)
+
+-- fraction=0 で凸包に簡略化 / Simplify to convex hull with fraction=0
+SELECT ST_AsText(STX_Simplifypolygonhull(
+  ST_GeomFromText('POLYGON((0 0, 5 1, 10 0, 10 10, 5 9, 0 10, 0 0))'), 0));
+-- POLYGON((0 0,10 0,10 10,0 10,0 0))
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_SimplifyPolygonHull()`
+- MySQL 標準: なし
+
+---
+
+### STX_Concavehullofpolygons
+
+ポリゴンの集合（MultiPolygon / GeometryCollection）を包含する凹型ポリゴンを生成する。
+Computes the concave hull enclosing a set of polygons.
+
+```sql
+STX_Concavehullofpolygons(geometry, ratio [, allow_holes]) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | ポリゴンの集合（MultiPolygon / GeometryCollection）/ Collection of polygons |
+| ratio | DOUBLE | 凹度の制御。0.0=最大凹度、1.0=凸包 / Concavity control. 0.0=max concavity, 1.0=convex hull |
+| allow_holes | INTEGER | 1: 穴を許可、0: 穴なし（デフォルト）/ 1: allow holes, 0: no holes (default) |
+
+#### 備考 (Notes)
+
+- `STX_Concavehull` と異なり、ポリゴン同士の形状を考慮した凹包を生成する / Unlike `STX_Concavehull`, considers the shapes of individual polygons
+- 入力ポリゴンは tight に扱われる（隙間なく密着）/ Input polygons are treated tightly (no gaps)
+
+#### 使用例 (Examples)
+
+```sql
+-- 2つのポリゴンの凹包 / Concave hull of 2 polygons
+SELECT ST_GeometryType(STX_Concavehullofpolygons(ST_GeomFromText(
+  'MULTIPOLYGON(((0 0,5 0,5 5,0 5,0 0)),((10 0,15 0,15 5,10 5,10 0)))'), 0.5));
+-- POLYGON
+
+-- 結果の面積は入力の合計面積以上 / Result area >= sum of input areas
+SELECT ST_Area(STX_Concavehullofpolygons(ST_GeomFromText(
+  'MULTIPOLYGON(((0 0,5 0,5 5,0 5,0 0)),((10 0,15 0,15 5,10 5,10 0)))'), 0.5))
+  >= 50;
+-- 1
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_ConcaveHull()` (ポリゴン集合に対して / for polygon sets)
+- MySQL 標準: なし
+
+---
+
 ## インストール (Installation)
 
 ```sql
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全46関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 46 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全51関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 51 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -2309,6 +2529,11 @@ ORDER BY UDF_NAME;
 | STX_Simplifypreservetopology   | char            |
 | STX_Unaryunion                 | char            |
 | STX_Clipbyrect                 | char            |
+| STX_Reduceprecision            | char            |
+| STX_Maximuminscribedcircle     | char            |
+| STX_Minimumwidth               | char            |
+| STX_Simplifypolygonhull        | char            |
+| STX_Concavehullofpolygons      | char            |
 +--------------------------------+-----------------+
 ```
 
