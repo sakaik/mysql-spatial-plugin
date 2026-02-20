@@ -48,6 +48,7 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Linesubstring](#stx_linesubstring) | GEOMETRY | 線の部分抽出 / Extracts a portion of a line |
 | [STX_Angle](#stx_angle) | DOUBLE | 3点がなす角度 / Angle formed by three points |
 | [STX_Translate](#stx_translate) | GEOMETRY | 平行移動 / Translates a geometry by dx, dy |
+| [STX_Translate_latlon](#stx_translate_latlon) | GEOMETRY | 緯度経度順で平行移動（Geographic専用） / Translates by delta_lat, delta_lon (Geographic only) |
 | [STX_Scale](#stx_scale) | GEOMETRY | スケール変換 / Scales a geometry by sx, sy |
 | [STX_Rotate](#stx_rotate) | GEOMETRY | 回転 / Rotates a geometry by angle |
 | [STX_Reverse](#stx_reverse) | GEOMETRY | 頂点順逆転 / Reverses vertex order |
@@ -638,6 +639,50 @@ SELECT ST_AsText(STX_Translate(
 #### 対応する他の関数 (Equivalent in Other Systems)
 
 - PostGIS: `ST_Translate()`
+
+---
+
+### STX_Translate_latlon
+
+Geographic 座標系のジオメトリを (delta_lat, delta_lon) で平行移動する。Geographic SRID 専用。
+Translates a geometry by (delta_lat, delta_lon). Geographic SRIDs only.
+
+```sql
+STX_Translate_latlon(geometry, delta_lat, delta_lon) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | 対象のジオメトリ（Geographic SRID のみ） / Input geometry (Geographic SRID only) |
+| delta_lat | DOUBLE | 緯度方向の移動量（度） / Latitude offset in degrees |
+| delta_lon | DOUBLE | 経度方向の移動量（度） / Longitude offset in degrees |
+
+#### 戻り値 (Return Value)
+
+平行移動後のジオメトリ（入力と同じ型・SRID）。全ジオメトリ型に対応。
+The translated geometry (same type and SRID as input). All geometry types are supported.
+
+Cartesian SRID のジオメトリを渡した場合は ERROR 3726 が発生する。その場合は `STX_Translate()` を使用すること。
+Passing a Cartesian SRS geometry raises ERROR 3726. Use `STX_Translate()` for Cartesian geometries.
+
+#### 使用例 (Examples)
+
+```sql
+-- 東京の点を北に1度、東に2度移動 / Move a point 1° north and 2° east
+SELECT ST_AsText(STX_Translate_latlon(
+  ST_GeomFromText('POINT(35 135)', 4326), 1, 2));
+-- POINT(36 137)
+
+-- 引数は常に (delta_lat, delta_lon) 順。SRID の軸順序に依存しない。
+-- Arguments are always (delta_lat, delta_lon) regardless of SRS axis order.
+```
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- なし（独自関数）。PostGIS の `ST_Translate()` は常に (dx, dy) 順。
+  No direct equivalent. PostGIS `ST_Translate()` always uses (dx, dy) order.
 
 ---
 
@@ -2555,6 +2600,7 @@ ORDER BY UDF_NAME;
 | STX_Snaptogrid                 | char            |
 | STX_Squaregrid                 | char            |
 | STX_Translate                  | char            |
+| STX_Translate_latlon           | char            |
 | STX_Makevalid                  | char            |
 | STX_Linemerge                  | char            |
 | STX_Voronoi                    | char            |

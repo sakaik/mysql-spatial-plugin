@@ -6,7 +6,7 @@ Motto: *"Imperfect beats unavailable."*
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports Cartesian (including projected CRS such as UTM) and Geographic (WGS84, etc.) coordinate systems.
 
-## Functions (57)
+## Functions (58)
 
 ### Spatial Measurement & Predicates
 
@@ -47,6 +47,7 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | Function | Description |
 |---|---|
 | `STX_Translate(geom, dx, dy)` | Shift geometry by offset |
+| `STX_Translate_latlon(geom, dlat, dlon)` | Shift by lat/lon offsets (Geographic only) (original) |
 | `STX_Scale(geom, sx, sy)` | Scale geometry by factors |
 | `STX_Rotate(geom, angle [, center])` | Rotate geometry (origin or specified center) |
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | General 2D affine transformation |
@@ -143,7 +144,7 @@ make install    # Copy .so to MySQL plugin directory
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-All 57 functions are registered automatically. No `CREATE FUNCTION` needed.
+All 58 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
 -- Verify

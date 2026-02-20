@@ -865,6 +865,57 @@ static void stx_translate_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// ----- stx_translate_latlon --------------------------------------------------
+// Translates a geometry by (delta_lat, delta_lon). Geographic SRIDs only.
+
+static bool stx_translate_latlon_init(UDF_INIT *initid, UDF_ARGS *args,
+                                       char *msg) {
+  if (args->arg_count != 3) {
+    strcpy(msg,
+           "stx_translate_latlon() requires 3 arguments"
+           " (geometry, delta_lat, delta_lon)");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  args->arg_type[2] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_translate_latlon(UDF_INIT *initid, UDF_ARGS *args,
+                                   char *result, unsigned long *length,
+                                   char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  if (!args->args[0] || !args->args[1] || !args->args[2]) {
+    *is_null = 1;
+    return nullptr;
+  }
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
+  if (!is_geographic_srid(srid)) {
+    my_error(ER_SRS_NOT_GEOGRAPHIC, MYF(0), "stx_translate_latlon", srid);
+    *error = 1;
+    return nullptr;
+  }
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) { *error = 1; return nullptr; }
+  double dlat = *reinterpret_cast<double *>(args->args[1]);
+  double dlon = *reinterpret_cast<double *>(args->args[2]);
+
+  // WKB stores (lon, lat) for geographic SRIDs, so x=lon, y=lat.
+  auto wkb = transform_and_write(*r, [dlon, dlat](double &x, double &y) {
+    x += dlon;
+    y += dlat;
+  });
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_translate_latlon_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 // ----- stx_scale -------------------------------------------------------------
 // Scales a geometry by (sx, sy) relative to origin.
 
@@ -4664,6 +4715,9 @@ static const udf_entry udf_table[] = {
      stx_angle_deinit},
     {"stx_translate", STRING_RESULT, (Udf_func_any)stx_translate,
      stx_translate_init, stx_translate_deinit},
+    {"stx_translate_latlon", STRING_RESULT,
+     (Udf_func_any)stx_translate_latlon, stx_translate_latlon_init,
+     stx_translate_latlon_deinit},
     {"stx_scale", STRING_RESULT, (Udf_func_any)stx_scale, stx_scale_init,
      stx_scale_deinit},
     {"stx_rotate", STRING_RESULT, (Udf_func_any)stx_rotate, stx_rotate_init,

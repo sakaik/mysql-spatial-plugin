@@ -498,6 +498,46 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
+-- stx_translate_latlon
+-- =============================================================================
+
+-- Geographic SRID 4326: delta_lat=1, delta_lon=2
+CALL assert_eq_double(
+  'translate_latlon: geographic point lat+1 lon+2',
+  ST_Latitude(stx_translate_latlon(ST_GeomFromText('POINT(35 135)', 4326), 1, 2)),
+  36, 0);
+
+CALL assert_eq_double(
+  'translate_latlon: geographic point lon check',
+  ST_Longitude(stx_translate_latlon(ST_GeomFromText('POINT(35 135)', 4326), 1, 2)),
+  137, 0);
+
+-- SRID 6668 (JGD2011)
+CALL assert_eq_double(
+  'translate_latlon: JGD2011 lat+0.5',
+  ST_Latitude(stx_translate_latlon(ST_GeomFromText('POINT(35 135)', 6668), 0.5, 0)),
+  35.5, 0);
+
+-- LineString
+CALL assert_eq_text(
+  'translate_latlon: geographic linestring',
+  ST_AsText(stx_translate_latlon(
+    ST_GeomFromText('LINESTRING(35 135, 36 136)', 4326), 1, 2)),
+  'LINESTRING(36 137,37 138)');
+
+-- NULL input returns NULL
+CALL assert_eq_text(
+  'translate_latlon: NULL input returns NULL',
+  ST_AsText(stx_translate_latlon(NULL, 1, 1)),
+  NULL);
+
+-- Cartesian SRID should error (ERROR 3726)
+CALL assert_error(
+  'translate_latlon: cartesian SRID error',
+  'stx_translate_latlon(ST_GeomFromText(''POINT(1 2)'', 0), 1, 1)',
+  3726);
+
+-- =============================================================================
 -- stx_scale
 -- =============================================================================
 
