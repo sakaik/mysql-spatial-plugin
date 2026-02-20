@@ -40,8 +40,8 @@
 
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
-| `STX_Translate(geom, dx, dy)` | ジオメトリを平行移動 | |
-| `STX_Translate_latlon(geom, dlat, dlon)` | 緯度経度順で平行移動（Geographic専用）(独自実装) | |
+| `STX_Translate(geom, dx, dy)` | ジオメトリを平行移動 | https://sakaik.hateblo.jp/entry/20260220/STX_Translate_func |
+| `STX_Translate_latlon(geom, dlat, dlon)` | 緯度経度順で平行移動（Geographic専用）(独自実装) | https://sakaik.hateblo.jp/entry/20260220/STX_Translate_func |
 | `STX_Scale(geom, sx, sy)` | ジオメトリを拡大・縮小 | |
 | `STX_Rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） | |
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | 一般2Dアフィン変換 | |
