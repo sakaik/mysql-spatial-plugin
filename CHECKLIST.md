@@ -15,7 +15,7 @@
 | `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す | |
 | `STX_RelateMatch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 | |
 | `STX_NPoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） |https://sakaik.hateblo.jp/entry/20260219/STX_NPoints_func |
-| `STX_IsRing(linestring)` | LineString がリング（閉環・非自己交差）か判定 | |
+| `STX_IsRing(linestring)` | LineString がリング（閉環・非自己交差）か判定 | https://sakaik.hateblo.jp/entry/20260220/STX_IsRing_func |
 
 ## ジオメトリ処理
 
