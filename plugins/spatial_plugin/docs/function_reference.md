@@ -39,63 +39,63 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | 関数名 (Function) | 戻り値型 (Return Type) | 概要 (Description) |
 |---|---|---|
 | [STX_Perimeter](#stx_perimeter) | DOUBLE | ポリゴンの周長 / Perimeter of a polygon |
-| [STX_Coveredby](#stx_coveredby) | INTEGER | 包含判定 / Tests if geometry is covered by another |
+| [STX_CoveredBy](#stx_coveredby) | INTEGER | 包含判定 / Tests if geometry is covered by another |
 | [STX_Covers](#stx_covers) | INTEGER | 包含判定（逆） / Tests if geometry covers another |
 | [STX_Dwithin](#stx_dwithin) | INTEGER | 距離閾値判定 / Tests if distance is within threshold |
 | [STX_Azimuth](#stx_azimuth) | DOUBLE | 2点間の方位角 / Azimuth between two points |
 | [STX_Project](#stx_project) | GEOMETRY | 点の投影 / Projects a point by distance and azimuth |
-| [STX_Linelocatepoint](#stx_linelocatepoint) | DOUBLE | 線上の最近接位置 / Fraction of closest point on line |
-| [STX_Linesubstring](#stx_linesubstring) | GEOMETRY | 線の部分抽出 / Extracts a portion of a line |
+| [STX_LineLocatepoint](#stx_linelocatepoint) | DOUBLE | 線上の最近接位置 / Fraction of closest point on line |
+| [STX_LineSubstring](#stx_linesubstring) | GEOMETRY | 線の部分抽出 / Extracts a portion of a line |
 | [STX_Angle](#stx_angle) | DOUBLE | 3点がなす角度 / Angle formed by three points |
 | [STX_Translate](#stx_translate) | GEOMETRY | 平行移動 / Translates a geometry by dx, dy |
 | [STX_Translate_latlon](#stx_translate_latlon) | GEOMETRY | 緯度経度順で平行移動（Geographic専用） / Translates by delta_lat, delta_lon (Geographic only) |
 | [STX_Scale](#stx_scale) | GEOMETRY | スケール変換 / Scales a geometry by sx, sy |
 | [STX_Rotate](#stx_rotate) | GEOMETRY | 回転 / Rotates a geometry by angle |
 | [STX_Reverse](#stx_reverse) | GEOMETRY | 頂点順逆転 / Reverses vertex order |
-| [STX_Pointonsurface](#stx_pointonsurface) | GEOMETRY | 内部保証点 / Guaranteed interior point |
-| [STX_Closestpoint](#stx_closestpoint) | GEOMETRY | 最近接点 / Closest point on geometry |
+| [STX_PointonSurface](#stx_pointonsurface) | GEOMETRY | 内部保証点 / Guaranteed interior point |
+| [STX_ClosestPoint](#stx_closestpoint) | GEOMETRY | 最近接点 / Closest point on geometry |
 | [STX_Relate](#stx_relate) | STRING | DE-9IM 行列 / DE-9IM matrix string |
-| [STX_Relatematch](#stx_relatematch) | INTEGER | DE-9IM パターン判定 / DE-9IM pattern match |
-| [STX_Makepoint](#stx_makepoint) | GEOMETRY | 座標から POINT 構築 / Create Point from coordinates |
+| [STX_RelateMatch](#stx_relatematch) | INTEGER | DE-9IM パターン判定 / DE-9IM pattern match |
+| [STX_MakePoint](#stx_makepoint) | GEOMETRY | 座標から POINT 構築 / Create Point from coordinates |
 | [STX_Affine](#stx_affine) | GEOMETRY | アフィン変換 / General 2D affine transformation |
 | [STX_Snaptogrid](#stx_snaptogrid) | GEOMETRY | 座標丸め / Snap coordinates to grid |
-| [STX_Removerepeatedpoints](#stx_removerepeatedpoints) | GEOMETRY | 重複頂点除去 / Remove consecutive duplicates |
+| [STX_RemoveRepeatedPoints](#stx_removerepeatedpoints) | GEOMETRY | 重複頂点除去 / Remove consecutive duplicates |
 | [STX_Segmentize](#stx_segmentize) | GEOMETRY | 線分分割 / Split segments to max length |
-| [STX_Generatepoints](#stx_generatepoints) | GEOMETRY | ランダム点生成 / Random points in polygon |
-| [STX_Asencodedpolyline](#stx_asencodedpolyline) | STRING | Encoded Polyline 出力 / Geometry to Encoded Polyline |
-| [STX_Linefromenccodedpolyline](#stx_linefromenccodedpolyline) | GEOMETRY | Encoded Polyline 入力 / Encoded Polyline to LineString |
-| [STX_Assvg](#stx_assvg) | STRING | SVG 出力 / Geometry to SVG path data |
-| [STX_Askml](#stx_askml) | STRING | KML 出力 / Geometry to KML |
-| [STX_Asewkt](#stx_asewkt) | STRING | EWKT 出力 / Geometry to EWKT |
-| [STX_Geomfromewkt](#stx_geomfromewkt) | GEOMETRY | EWKT 入力 / EWKT to Geometry |
-| [STX_Minimumboundingcircle](#stx_minimumboundingcircle) | GEOMETRY | 最小外接円 / Minimum bounding circle |
-| [STX_Squaregrid](#stx_squaregrid) | GEOMETRY | 矩形グリッド生成 / Square grid generation |
+| [STX_GeneratePoints](#stx_generatepoints) | GEOMETRY | ランダム点生成 / Random points in polygon |
+| [STX_AsEncodedPolyline](#stx_asencodedpolyline) | STRING | Encoded Polyline 出力 / Geometry to Encoded Polyline |
+| [STX_LineFromEnccodedPolyline](#stx_linefromenccodedpolyline) | GEOMETRY | Encoded Polyline 入力 / Encoded Polyline to LineString |
+| [STX_AsSvg](#stx_assvg) | STRING | SVG 出力 / Geometry to SVG path data |
+| [STX_AsKml](#stx_askml) | STRING | KML 出力 / Geometry to KML |
+| [STX_AsEwkt](#stx_asewkt) | STRING | EWKT 出力 / Geometry to EWKT |
+| [STX_GeomFromEwkt](#stx_geomfromewkt) | GEOMETRY | EWKT 入力 / EWKT to Geometry |
+| [STX_MinimumBoundingCircle](#stx_minimumboundingcircle) | GEOMETRY | 最小外接円 / Minimum bounding circle |
+| [STX_SquareGrid](#stx_squaregrid) | GEOMETRY | 矩形グリッド生成 / Square grid generation |
 | [STX_Hexgrid](#stx_hexgrid) | GEOMETRY | 六角形グリッド生成 / Hexagonal grid generation |
-| [STX_Makevalid](#stx_makevalid) | GEOMETRY | 不正ジオメトリ修復 / Repair invalid geometry (GEOS) |
-| [STX_Linemerge](#stx_linemerge) | GEOMETRY | ライン結合 / Merge connected LineStrings (GEOS) |
+| [STX_MakeValid](#stx_makevalid) | GEOMETRY | 不正ジオメトリ修復 / Repair invalid geometry (GEOS) |
+| [STX_LineMerge](#stx_linemerge) | GEOMETRY | ライン結合 / Merge connected LineStrings (GEOS) |
 | [STX_Voronoi](#stx_voronoi) | GEOMETRY | ボロノイ図 / Voronoi diagram (GEOS) |
 | [STX_Delaunay](#stx_delaunay) | GEOMETRY | ドロネー三角形分割 / Delaunay triangulation (GEOS) |
-| [STX_Offsetcurve](#stx_offsetcurve) | GEOMETRY | ラインの平行オフセット / Parallel offset line (GEOS) |
-| [STX_Concavehull](#stx_concavehull) | GEOMETRY | 凹包 / Concave hull (GEOS) |
+| [STX_OffsetCurve](#stx_offsetcurve) | GEOMETRY | ラインの平行オフセット / Parallel offset line (GEOS) |
+| [STX_ConcaveHull](#stx_concavehull) | GEOMETRY | 凹包 / Concave hull (GEOS) |
 | [STX_Snap](#stx_snap) | GEOMETRY | 頂点スナッピング / Snap vertices to another geometry (GEOS) |
 | [STX_Polygonize](#stx_polygonize) | GEOMETRY | ラインからポリゴン構築 / Create polygons from linework (GEOS) |
-| [STX_Buildarea](#stx_buildarea) | GEOMETRY | ラインから面構築 / Create area from linework (GEOS) |
-| [STX_Sharedpaths](#stx_sharedpaths) | GEOMETRY | 共有パス抽出 / Shared paths between lineal geometries (GEOS) |
+| [STX_BuildArea](#stx_buildarea) | GEOMETRY | ラインから面構築 / Create area from linework (GEOS) |
+| [STX_SharedPaths](#stx_sharedpaths) | GEOMETRY | 共有パス抽出 / Shared paths between lineal geometries (GEOS) |
 | [STX_Node](#stx_node) | GEOMETRY | ラインのノード化 / Node a set of linestrings (GEOS) |
-| [STX_Simplifypreservetopology](#stx_simplifypreservetopology) | GEOMETRY | トポロジ保持簡略化 / Topology-preserving simplification (GEOS) |
-| [STX_Unaryunion](#stx_unaryunion) | GEOMETRY | 構成要素の Union / Union of all components (GEOS) |
-| [STX_Clipbyrect](#stx_clipbyrect) | GEOMETRY | 矩形クリッピング / Fast rectangle clipping (GEOS) |
-| [STX_Reduceprecision](#stx_reduceprecision) | GEOMETRY | 精度削減 / Reduce coordinate precision (GEOS) |
-| [STX_Maximuminscribedcircle](#stx_maximuminscribedcircle) | GEOMETRY | 最大内接円 / Maximum inscribed circle (GEOS) |
-| [STX_Minimumwidth](#stx_minimumwidth) | GEOMETRY | 最小幅 / Minimum width of geometry (GEOS) |
-| [STX_Simplifypolygonhull](#stx_simplifypolygonhull) | GEOMETRY | ポリゴン Hull 簡略化 / Polygon hull simplification (GEOS) |
-| [STX_Concavehullofpolygons](#stx_concavehullofpolygons) | GEOMETRY | ポリゴン集合の凹包 / Concave hull of polygon set (GEOS) |
-| [STX_Npoints](#stx_npoints) | INTEGER | 全頂点数 / Total number of vertices |
+| [STX_SimplifyPreserveTopology](#stx_simplifypreservetopology) | GEOMETRY | トポロジ保持簡略化 / Topology-preserving simplification (GEOS) |
+| [STX_UnaryUnion](#stx_unaryunion) | GEOMETRY | 構成要素の Union / Union of all components (GEOS) |
+| [STX_ClipByRect](#stx_clipbyrect) | GEOMETRY | 矩形クリッピング / Fast rectangle clipping (GEOS) |
+| [STX_ReducePrecision](#stx_reduceprecision) | GEOMETRY | 精度削減 / Reduce coordinate precision (GEOS) |
+| [STX_MaximumInscribedCircle](#stx_maximuminscribedcircle) | GEOMETRY | 最大内接円 / Maximum inscribed circle (GEOS) |
+| [STX_MinimumWidth](#stx_minimumwidth) | GEOMETRY | 最小幅 / Minimum width of geometry (GEOS) |
+| [STX_SimplifyPolygonHull](#stx_simplifypolygonhull) | GEOMETRY | ポリゴン Hull 簡略化 / Polygon hull simplification (GEOS) |
+| [STX_ConcaveHullOfPolygons](#stx_concavehullofpolygons) | GEOMETRY | ポリゴン集合の凹包 / Concave hull of polygon set (GEOS) |
+| [STX_NPoints](#stx_npoints) | INTEGER | 全頂点数 / Total number of vertices |
 | [STX_Makeline](#stx_makeline) | GEOMETRY | LineString 構築 / Create LineString from points |
-| [STX_Makepolygon](#stx_makepolygon) | GEOMETRY | Polygon 構築 / Create Polygon from LineString |
+| [STX_MakePolygon](#stx_makepolygon) | GEOMETRY | Polygon 構築 / Create Polygon from LineString |
 | [STX_Points](#stx_points) | GEOMETRY | 全頂点抽出 / Extract all vertices as MultiPoint |
-| [STX_Isring](#stx_isring) | INTEGER | 閉環判定 / Test if LineString is a ring (GEOS) |
-| [STX_Shortestline](#stx_shortestline) | GEOMETRY | 最短線分 / Shortest line between geometries (GEOS) |
+| [STX_IsRing](#stx_isring) | INTEGER | 閉環判定 / Test if LineString is a ring (GEOS) |
+| [STX_ShortestLine](#stx_shortestline) | GEOMETRY | 最短線分 / Shortest line between geometries (GEOS) |
 
 ---
 
@@ -152,13 +152,13 @@ SELECT STX_Perimeter(
 
 ---
 
-### STX_Coveredby
+### STX_CoveredBy
 
 第1引数のジオメトリが第2引数のジオメトリに完全に包含されるかを判定する。境界上の点も包含とみなす（`ST_Within` との違い）。
 Tests whether geometry1 is completely covered by geometry2. Points on the boundary are considered covered (unlike `ST_Within`).
 
 ```sql
-STX_Coveredby(geometry1, geometry2) -> INTEGER
+STX_CoveredBy(geometry1, geometry2) -> INTEGER
 ```
 
 #### 引数 (Arguments)
@@ -435,13 +435,13 @@ SELECT ST_AsText(STX_Project(
 
 ---
 
-### STX_Linelocatepoint
+### STX_LineLocatepoint
 
 ライン上で指定した点に最も近い位置を、ラインの始点からの比率（0.0 ~ 1.0）で返す。
 Returns the fraction (0.0 to 1.0) of the line's total length at the point closest to the given point.
 
 ```sql
-STX_Linelocatepoint(line, point) -> DOUBLE
+STX_LineLocatepoint(line, point) -> DOUBLE
 ```
 
 #### 引数 (Arguments)
@@ -492,13 +492,13 @@ SELECT STX_Linelocatepoint(
 
 ---
 
-### STX_Linesubstring
+### STX_LineSubstring
 
 ラインの指定区間（始点・終点を比率で指定）を新しい LineString として返す。
 Returns a sub-linestring between the specified start and end fractions.
 
 ```sql
-STX_Linesubstring(line, start_fraction, end_fraction) -> GEOMETRY (LineString)
+STX_LineSubstring(line, start_fraction, end_fraction) -> GEOMETRY (LineString)
 ```
 
 #### 引数 (Arguments)
@@ -819,13 +819,13 @@ SELECT ST_AsText(STX_Reverse(
 
 ---
 
-### STX_Pointonsurface
+### STX_PointonSurface
 
 ポリゴン（またはマルチポリゴン）の内部に位置することが保証された点を返す。
 Returns a point guaranteed to lie in the interior of a polygon (or multipolygon).
 
 ```sql
-STX_Pointonsurface(geometry) -> GEOMETRY (Point)
+STX_PointonSurface(geometry) -> GEOMETRY (Point)
 ```
 
 #### 引数 (Arguments)
@@ -872,13 +872,13 @@ SELECT STX_Coveredby(
 
 ---
 
-### STX_Closestpoint
+### STX_ClosestPoint
 
 第1引数の点から、第2引数のジオメトリ上で最も近い点を返す。
 Returns the closest point on geometry2 to the given point (geometry1).
 
 ```sql
-STX_Closestpoint(point, geometry) -> GEOMETRY (Point)
+STX_ClosestPoint(point, geometry) -> GEOMETRY (Point)
 ```
 
 #### 引数 (Arguments)
@@ -983,13 +983,13 @@ SELECT STX_Relate(
 
 ---
 
-### STX_Relatematch
+### STX_RelateMatch
 
 2つのジオメトリの DE-9IM 行列が指定したパターンに一致するかを判定する。
 Tests whether the DE-9IM matrix of two geometries matches a given pattern.
 
 ```sql
-STX_Relatematch(geometry1, geometry2, pattern) -> INTEGER
+STX_RelateMatch(geometry1, geometry2, pattern) -> INTEGER
 ```
 
 #### 引数 (Arguments)
@@ -1044,13 +1044,13 @@ SELECT STX_Relatematch(
 
 ---
 
-### STX_Makepoint
+### STX_MakePoint
 
 座標値から POINT ジオメトリを構築する。引数の順序は SRID の空間参照系定義に基づく軸順序に従う。
 Creates a Point geometry from coordinate values. Argument order follows the axis order defined by the SRID's spatial reference system.
 
 ```sql
-STX_Makepoint(coord1, coord2 [, srid]) -> GEOMETRY (Point)
+STX_MakePoint(coord1, coord2 [, srid]) -> GEOMETRY (Point)
 ```
 
 #### 引数 (Arguments)
@@ -1207,14 +1207,14 @@ SELECT ST_AsText(STX_Snaptogrid(
 
 ---
 
-### STX_Removerepeatedpoints
+### STX_RemoveRepeatedPoints
 
 ジオメトリから連続する重複頂点を除去する。
 Removes consecutive duplicate vertices from a geometry.
 
 ```sql
-STX_Removerepeatedpoints(geometry) -> GEOMETRY
-STX_Removerepeatedpoints(geometry, tolerance) -> GEOMETRY
+STX_RemoveRepeatedPoints(geometry) -> GEOMETRY
+STX_RemoveRepeatedPoints(geometry, tolerance) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -1293,13 +1293,13 @@ SELECT ST_AsText(STX_Segmentize(
 
 ---
 
-### STX_Generatepoints
+### STX_GeneratePoints
 
 ポリゴンまたはマルチポリゴンの内部にランダムな点を生成し、MultiPoint として返す。
 Generates random points inside a Polygon or MultiPolygon and returns them as a MultiPoint.
 
 ```sql
-STX_Generatepoints(geometry, npoints [, seed]) -> GEOMETRY (MultiPoint)
+STX_GeneratePoints(geometry, npoints [, seed]) -> GEOMETRY (MultiPoint)
 ```
 
 #### 引数 (Arguments)
@@ -1342,13 +1342,13 @@ SELECT ST_AsText(STX_Generatepoints(
 
 ---
 
-### STX_Asencodedpolyline
+### STX_AsEncodedPolyline
 
 LineString ジオメトリを Google Encoded Polyline Algorithm Format の文字列に変換する。
 Converts a LineString geometry to a Google Encoded Polyline Algorithm Format string.
 
 ```sql
-STX_Asencodedpolyline(geometry [, precision]) -> STRING
+STX_AsEncodedPolyline(geometry [, precision]) -> STRING
 ```
 
 #### 引数 (Arguments)
@@ -1379,13 +1379,13 @@ SELECT STX_Asencodedpolyline(
 
 ---
 
-### STX_Linefromenccodedpolyline
+### STX_LineFromEnccodedPolyline
 
 Google Encoded Polyline Algorithm Format の文字列から LineString ジオメトリを構築する。
 Creates a LineString geometry from a Google Encoded Polyline Algorithm Format string.
 
 ```sql
-STX_Linefromenccodedpolyline(text [, srid [, precision]]) -> GEOMETRY (LineString)
+STX_LineFromEnccodedPolyline(text [, srid [, precision]]) -> GEOMETRY (LineString)
 ```
 
 #### 引数 (Arguments)
@@ -1423,13 +1423,13 @@ SELECT ST_AsText(STX_Linefromenccodedpolyline(
 
 ---
 
-### STX_Assvg
+### STX_AsSvg
 
 ジオメトリを SVG (Scalable Vector Graphics) パスデータ文字列に変換する。
 Converts a geometry to an SVG path data string.
 
 ```sql
-STX_Assvg(geometry [, rel [, precision]]) -> STRING
+STX_AsSvg(geometry [, rel [, precision]]) -> STRING
 ```
 
 #### 引数 (Arguments)
@@ -1476,13 +1476,13 @@ SELECT STX_Assvg(ST_GeomFromText('LINESTRING(10 20, 30 40, 50 20)'), 1);
 
 ---
 
-### STX_Askml
+### STX_AsKml
 
 ジオメトリを KML (Keyhole Markup Language) 形式の XML 文字列に変換する。
 Converts a geometry to a KML XML string.
 
 ```sql
-STX_Askml(geometry [, precision]) -> STRING
+STX_AsKml(geometry [, precision]) -> STRING
 ```
 
 #### 引数 (Arguments)
@@ -1529,13 +1529,13 @@ SELECT STX_Askml(ST_GeomFromText('POINT(1.23456789 9.87654321)'), 4);
 
 ---
 
-### STX_Asewkt
+### STX_AsEwkt
 
 ジオメトリを EWKT (Extended Well-Known Text) 形式の文字列に変換する。SRID プレフィックス付き。
 Converts a geometry to an EWKT string with SRID prefix.
 
 ```sql
-STX_Asewkt(geometry) -> STRING
+STX_AsEwkt(geometry) -> STRING
 ```
 
 #### 引数 (Arguments)
@@ -1579,13 +1579,13 @@ SELECT STX_Asewkt(ST_GeomFromText('LINESTRING(0 0, 10 10)'));
 
 ---
 
-### STX_Geomfromewkt
+### STX_GeomFromEwkt
 
 EWKT (Extended Well-Known Text) 文字列からジオメトリを構築する。
 Creates a geometry from an EWKT string.
 
 ```sql
-STX_Geomfromewkt(text) -> GEOMETRY
+STX_GeomFromEwkt(text) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -1634,13 +1634,13 @@ SELECT ST_AsText(STX_Geomfromewkt(
 
 ---
 
-### STX_Minimumboundingcircle
+### STX_MinimumBoundingCircle
 
 任意のジオメトリの全頂点を包含する最小の円（Minimum Bounding Circle）を Polygon として返す。
 Returns the smallest circle that encloses all vertices of a geometry, approximated as a Polygon.
 
 ```sql
-STX_Minimumboundingcircle(geometry [, segs_per_quarter]) -> GEOMETRY (Polygon)
+STX_MinimumBoundingCircle(geometry [, segs_per_quarter]) -> GEOMETRY (Polygon)
 ```
 
 #### 引数 (Arguments)
@@ -1687,13 +1687,13 @@ SELECT ROUND(ST_Area(STX_Minimumboundingcircle(
 
 ---
 
-### STX_Squaregrid
+### STX_SquareGrid
 
 入力ジオメトリのバウンディングボックスを覆う正方形グリッドを GeometryCollection として返す。
 Returns a GeometryCollection of square grid cells covering the bounding box of the input geometry.
 
 ```sql
-STX_Squaregrid(size, geometry) -> GEOMETRY (GeometryCollection)
+STX_SquareGrid(size, geometry) -> GEOMETRY (GeometryCollection)
 ```
 
 #### 引数 (Arguments)
@@ -1799,13 +1799,13 @@ SELECT ST_GeometryType(STX_Hexgrid(5,
 以下の関数は [GEOS](https://libgeos.org/) ライブラリ（静的リンク）を使用して実装されている。
 The following functions are implemented using the [GEOS](https://libgeos.org/) library (statically linked).
 
-### STX_Makevalid
+### STX_MakeValid
 
 不正なジオメトリを修復する。自己交差するポリゴン等を有効なジオメトリに変換する。
 Repairs an invalid geometry. Converts self-intersecting polygons etc. into valid geometries.
 
 ```sql
-STX_Makevalid(geometry) -> GEOMETRY
+STX_MakeValid(geometry) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -1835,13 +1835,13 @@ SELECT ST_AsText(STX_Makevalid(
 
 ---
 
-### STX_Linemerge
+### STX_LineMerge
 
 MultiLineString 内の接続する LineString を結合する。
 Merges connected LineStrings within a MultiLineString.
 
 ```sql
-STX_Linemerge(geometry) -> GEOMETRY
+STX_LineMerge(geometry) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -1942,13 +1942,13 @@ SELECT ST_GeometryType(STX_Delaunay(
 
 ---
 
-### STX_Offsetcurve
+### STX_OffsetCurve
 
 入力ラインから指定距離だけオフセットした平行線を生成する。
 Returns a line offset from the input line by the given distance.
 
 ```sql
-STX_Offsetcurve(geometry, distance [, quad_segs [, join_style [, mitre_limit]]]) -> GEOMETRY
+STX_OffsetCurve(geometry, distance [, quad_segs [, join_style [, mitre_limit]]]) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -1991,13 +1991,13 @@ SELECT ST_AsText(STX_Offsetcurve(
 
 ---
 
-### STX_Concavehull
+### STX_ConcaveHull
 
 入力ジオメトリの頂点を包含する凹型ポリゴン（凹包）を生成する。
 Computes the concave hull of a geometry — a polygon that encloses all vertices.
 
 ```sql
-STX_Concavehull(geometry, ratio [, allow_holes]) -> GEOMETRY
+STX_ConcaveHull(geometry, ratio [, allow_holes]) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2116,13 +2116,13 @@ SELECT ST_NumGeometries(STX_Polygonize(ST_GeomFromText(
 
 ---
 
-### STX_Buildarea
+### STX_BuildArea
 
 ラインワークから面的ジオメトリを構築する。内部リングは穴になる。
 Creates an areal geometry from linework. Interior rings become holes.
 
 ```sql
-STX_Buildarea(geometry) -> GEOMETRY
+STX_BuildArea(geometry) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2152,13 +2152,13 @@ SELECT ST_Area(STX_Buildarea(ST_GeomFromText(
 
 ---
 
-### STX_Sharedpaths
+### STX_SharedPaths
 
 2つの線形ジオメトリの共有パス（重複する部分）を抽出する。
 Returns shared paths between two lineal geometries.
 
 ```sql
-STX_Sharedpaths(geometry1, geometry2) -> GEOMETRY (GeometryCollection)
+STX_SharedPaths(geometry1, geometry2) -> GEOMETRY (GeometryCollection)
 ```
 
 #### 引数 (Arguments)
@@ -2226,13 +2226,13 @@ SELECT ST_NumGeometries(STX_Node(ST_GeomFromText(
 
 ---
 
-### STX_Simplifypreservetopology
+### STX_SimplifyPreserveTopology
 
 トポロジを保持しながらジオメトリを簡略化する。MySQL の `ST_Simplify` とは異なり、ポリゴンのリング交差や崩壊を防止する。
 Simplifies geometry using Douglas-Peucker while preserving topology. Unlike MySQL's `ST_Simplify`, prevents ring crossings and collapses in polygons.
 
 ```sql
-STX_Simplifypreservetopology(geometry, tolerance) -> GEOMETRY
+STX_SimplifyPreserveTopology(geometry, tolerance) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2258,13 +2258,13 @@ SELECT ST_NumPoints(ST_ExteriorRing(STX_Simplifypreservetopology(
 
 ---
 
-### STX_Unaryunion
+### STX_UnaryUnion
 
 単一ジオメトリの全構成要素を Union する。重複する MultiPolygon の修復等に使用。
 Computes the union of all components of a geometry. Useful for dissolving overlapping MultiPolygons.
 
 ```sql
-STX_Unaryunion(geometry) -> GEOMETRY
+STX_UnaryUnion(geometry) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2289,13 +2289,13 @@ SELECT ST_Area(STX_Unaryunion(ST_GeomFromText(
 
 ---
 
-### STX_Clipbyrect
+### STX_ClipByRect
 
 ジオメトリを2Dバウンディングボックスで高速にクリッピングする。
 Fast clipping of a geometry by a 2D bounding box.
 
 ```sql
-STX_Clipbyrect(geometry, xmin, ymin, xmax, ymax) -> GEOMETRY
+STX_ClipByRect(geometry, xmin, ymin, xmax, ymax) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2330,13 +2330,13 @@ SELECT ST_Area(STX_Clipbyrect(
 
 ---
 
-### STX_Reduceprecision
+### STX_ReducePrecision
 
 ジオメトリの座標精度を削減する。`STX_Snaptogrid` と異なり、結果のジオメトリの妥当性を保証する。
 Reduces coordinate precision of a geometry. Unlike `STX_Snaptogrid`, guarantees the validity of the result.
 
 ```sql
-STX_Reduceprecision(geometry, gridsize) -> GEOMETRY
+STX_ReducePrecision(geometry, gridsize) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2372,13 +2372,13 @@ SELECT ST_GeometryType(STX_Reduceprecision(
 
 ---
 
-### STX_Maximuminscribedcircle
+### STX_MaximumInscribedCircle
 
-ポリゴン内部に収まる最大の円（最大内接円）の中心と半径を返す。結果は中心から最近接境界点への LineString。
-Returns the largest circle that fits inside a polygon. Result is a LineString from the center to the nearest boundary point.
+ポリゴン内部に収まる最大の円（最大内接円）の半径を、中心から最近接境界点への LineString として返す。
+Returns the radius of the largest inscribed circle as a LineString from the center to the nearest boundary point.
 
 ```sql
-STX_Maximuminscribedcircle(geometry, tolerance) -> GEOMETRY (LineString)
+STX_MaximumInscribedCircle(geometry, tolerance) -> GEOMETRY (LineString)
 ```
 
 #### 引数 (Arguments)
@@ -2415,13 +2415,13 @@ SELECT ST_Length(STX_Maximuminscribedcircle(
 
 ---
 
-### STX_Minimumwidth
+### STX_MinimumWidth
 
 ジオメトリの最小幅を表す LineString を返す。最小幅とは、ジオメトリを完全に含む平行な2直線間の最短距離。
 Returns a LineString representing the minimum width of a geometry — the shortest distance between two parallel lines that fully contain the geometry.
 
 ```sql
-STX_Minimumwidth(geometry) -> GEOMETRY (LineString)
+STX_MinimumWidth(geometry) -> GEOMETRY (LineString)
 ```
 
 #### 引数 (Arguments)
@@ -2458,13 +2458,13 @@ SELECT ST_Length(STX_Minimumwidth(
 
 ---
 
-### STX_Simplifypolygonhull
+### STX_SimplifyPolygonHull
 
 ポリゴンの外形を簡略化して、元のポリゴンを包含（outer hull）または内包（inner hull）するポリゴンを返す。
 Simplifies a polygon to a hull that contains (outer) or is contained by (inner) the original polygon.
 
 ```sql
-STX_Simplifypolygonhull(geometry, vertex_fraction [, is_outer]) -> GEOMETRY
+STX_SimplifyPolygonHull(geometry, vertex_fraction [, is_outer]) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2501,13 +2501,13 @@ SELECT ST_AsText(STX_Simplifypolygonhull(
 
 ---
 
-### STX_Concavehullofpolygons
+### STX_ConcaveHullOfPolygons
 
 ポリゴンの集合（MultiPolygon / GeometryCollection）を包含する凹型ポリゴンを生成する。
 Computes the concave hull enclosing a set of polygons.
 
 ```sql
-STX_Concavehullofpolygons(geometry, ratio [, allow_holes]) -> GEOMETRY
+STX_ConcaveHullOfPolygons(geometry, ratio [, allow_holes]) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -2632,13 +2632,13 @@ ORDER BY UDF_NAME;
 `UDF_RETURN_TYPE` が `char` の関数は、実際にはジオメトリのバイナリ（SRID + WKB）を返す。UDF の仕様上 GEOMETRY 型を直接返せないため `STRING_RESULT` で登録している。`ST_AsText()` 等に渡せばジオメトリとして正しく解釈される。
 Functions with `UDF_RETURN_TYPE = char` actually return geometry binary data (SRID + WKB). Due to the UDF specification, GEOMETRY cannot be used as a return type directly, so they are registered as `STRING_RESULT`. The returned values can be passed to `ST_AsText()` or other spatial functions and will be interpreted correctly as geometries.
 
-### STX_Npoints
+### STX_NPoints
 
 ジオメトリの全頂点数を返す。MySQL の `ST_NumPoints()` は LineString のみ対応だが、本関数は全ジオメトリ型に対応する。
 Returns the total number of vertices in any geometry type. Unlike MySQL's `ST_NumPoints()` which only works for LineString, this function supports all geometry types.
 
 ```sql
-STX_Npoints(geometry) -> INTEGER
+STX_NPoints(geometry) -> INTEGER
 ```
 
 #### 引数 (Arguments)
@@ -2696,14 +2696,14 @@ SELECT ST_AsText(STX_Makeline(
 
 ---
 
-### STX_Makepolygon
+### STX_MakePolygon
 
 閉じた LineString から Polygon を構築する。オプションで内環（穴）を MultiLineString として指定可能。
 Creates a Polygon from a closed LineString (outer ring). Optionally, inner rings (holes) can be specified as a MultiLineString.
 
 ```sql
-STX_Makepolygon(outer_ring)                -> GEOMETRY (Polygon)
-STX_Makepolygon(outer_ring, inner_rings)   -> GEOMETRY (Polygon)
+STX_MakePolygon(outer_ring)                -> GEOMETRY (Polygon)
+STX_MakePolygon(outer_ring, inner_rings)   -> GEOMETRY (Polygon)
 ```
 
 #### 引数 (Arguments)
@@ -2760,13 +2760,13 @@ SELECT ST_AsText(STX_Points(ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))'
 
 ---
 
-### STX_Isring
+### STX_IsRing
 
 LineString がリング（閉じていて自己交差がない）かどうかを判定する。GEOS `GEOSisRing()` を使用。
 Returns 1 if the LineString is a ring (closed and simple, i.e., no self-intersections), 0 otherwise. Uses GEOS `GEOSisRing()`.
 
 ```sql
-STX_Isring(linestring) -> INTEGER (0 or 1)
+STX_IsRing(linestring) -> INTEGER (0 or 1)
 ```
 
 #### 引数 (Arguments)
@@ -2795,13 +2795,13 @@ SELECT STX_Isring(ST_GeomFromText('LINESTRING(0 0,2 0,0 2,2 2,0 0)'));
 
 ---
 
-### STX_Shortestline
+### STX_ShortestLine
 
 2つのジオメトリ間の最短線分を LineString として返す。GEOS `GEOSNearestPoints()` を使用。
 Returns the shortest line (LineString) between two geometries. Uses GEOS `GEOSNearestPoints()`.
 
 ```sql
-STX_Shortestline(geometry1, geometry2) -> GEOMETRY (LineString)
+STX_ShortestLine(geometry1, geometry2) -> GEOMETRY (LineString)
 ```
 
 #### 引数 (Arguments)

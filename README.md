@@ -13,33 +13,33 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | Function | Description |
 |---|---|
 | `STX_Perimeter(geom)` | Polygon/MultiPolygon perimeter |
-| `STX_Coveredby(g1, g2)` | Tests if g1 is covered by g2 |
+| `STX_CoveredBy(g1, g2)` | Tests if g1 is covered by g2 |
 | `STX_Covers(g1, g2)` | Tests if g1 covers g2 |
 | `STX_Dwithin(g1, g2, dist)` | Tests if distance between geometries <= threshold |
 | `STX_Azimuth(p1, p2)` | Bearing from p1 to p2 (radians, clockwise from north) |
 | `STX_Angle(p1, p2, p3)` | Angle at p2 formed by p1-p2-p3 |
 | `STX_Relate(g1, g2)` | DE-9IM relationship matrix |
-| `STX_Relatematch(g1, g2, pattern)` | Test DE-9IM pattern match |
-| `STX_Npoints(geom)` | Total number of vertices (all geometry types) |
-| `STX_Isring(linestring)` | Test if LineString is a ring (closed and simple) |
+| `STX_RelateMatch(g1, g2, pattern)` | Test DE-9IM pattern match |
+| `STX_NPoints(geom)` | Total number of vertices (all geometry types) |
+| `STX_IsRing(linestring)` | Test if LineString is a ring (closed and simple) |
 
 ### Geometry Processing
 
 | Function | Description |
 |---|---|
 | `STX_Project(point, dist, azimuth)` | Project point by distance and bearing |
-| `STX_Linelocatepoint(line, point)` | Fraction of line length at closest point |
-| `STX_Linesubstring(line, start, end)` | Extract portion of linestring |
-| `STX_Closestpoint(point, geom)` | Nearest point on geometry to given point |
-| `STX_Shortestline(g1, g2)` | Shortest line between two geometries |
-| `STX_Pointonsurface(geom)` | Interior point of polygon |
+| `STX_LineLocatepoint(line, point)` | Fraction of line length at closest point |
+| `STX_LineSubstring(line, start, end)` | Extract portion of linestring |
+| `STX_ClosestPoint(point, geom)` | Nearest point on geometry to given point |
+| `STX_ShortestLine(g1, g2)` | Shortest line between two geometries |
+| `STX_PointonSurface(geom)` | Interior point of polygon |
 | `STX_Points(geom)` | Extract all vertices as MultiPoint |
-| `STX_Makepoint(coord1, coord2 [, srid])` | Create a point from coordinates (axis order follows SRS definition) |
+| `STX_MakePoint(coord1, coord2 [, srid])` | Create a point from coordinates (axis order follows SRS definition) |
 | `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Create LineString from points |
-| `STX_Makepolygon(ring [, inner_rings])` | Create Polygon from LineString |
-| `STX_Generatepoints(geom, n [, seed])` | Generate random points inside polygon |
-| `STX_Minimumboundingcircle(geom [, segs])` | Minimum bounding circle as polygon |
-| `STX_Squaregrid(size, geom)` | Square grid covering bounding box |
+| `STX_MakePolygon(ring [, inner_rings])` | Create Polygon from LineString |
+| `STX_GeneratePoints(geom, n [, seed])` | Generate random points inside polygon |
+| `STX_MinimumBoundingCircle(geom [, segs])` | Minimum bounding circle as polygon |
+| `STX_SquareGrid(size, geom)` | Square grid covering bounding box |
 | `STX_Hexgrid(size, geom)` | Hexagonal grid covering bounding box |
 
 ### Coordinate Transformations
@@ -53,43 +53,43 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | General 2D affine transformation |
 | `STX_Reverse(geom)` | Reverse vertex order |
 | `STX_Snaptogrid(geom, size [, size_y])` | Snap coordinates to grid |
-| `STX_Removerepeatedpoints(geom [, tol])` | Remove consecutive duplicate vertices |
+| `STX_RemoveRepeatedPoints(geom [, tol])` | Remove consecutive duplicate vertices |
 | `STX_Segmentize(geom, max_length)` | Split long segments by adding vertices |
 
 ### GEOS-based Functions
 
 | Function | Description |
 |---|---|
-| `STX_Makevalid(geom)` | Repair invalid geometry |
-| `STX_Linemerge(geom)` | Merge connected LineStrings |
+| `STX_MakeValid(geom)` | Repair invalid geometry |
+| `STX_LineMerge(geom)` | Merge connected LineStrings |
 | `STX_Voronoi(geom [, tolerance [, envelope]])` | Voronoi diagram |
 | `STX_Delaunay(geom [, tolerance [, edges_only]])` | Delaunay triangulation |
-| `STX_Offsetcurve(geom, dist [, quad_segs [, join [, mitre]]])` | Parallel offset line |
-| `STX_Concavehull(geom, ratio [, allow_holes])` | Concave hull |
+| `STX_OffsetCurve(geom, dist [, quad_segs [, join [, mitre]]])` | Parallel offset line |
+| `STX_ConcaveHull(geom, ratio [, allow_holes])` | Concave hull |
 | `STX_Snap(g1, g2, tolerance)` | Snap vertices to another geometry |
 | `STX_Polygonize(geom)` | Create polygons from linework |
-| `STX_Buildarea(geom)` | Create area from linework (inner rings become holes) |
-| `STX_Sharedpaths(g1, g2)` | Shared paths between two lineal geometries |
+| `STX_BuildArea(geom)` | Create area from linework (inner rings become holes) |
+| `STX_SharedPaths(g1, g2)` | Shared paths between two lineal geometries |
 | `STX_Node(geom)` | Fully node a set of linestrings |
-| `STX_Simplifypreservetopology(geom, tol)` | Topology-preserving simplification |
-| `STX_Unaryunion(geom)` | Union of all components of a geometry |
-| `STX_Clipbyrect(geom, xmin, ymin, xmax, ymax)` | Fast clipping by rectangle |
-| `STX_Reduceprecision(geom, gridsize)` | Reduce coordinate precision (validity preserving) |
-| `STX_Maximuminscribedcircle(geom, tolerance)` | Maximum inscribed circle |
-| `STX_Minimumwidth(geom)` | Minimum width of a geometry |
-| `STX_Simplifypolygonhull(geom, frac [, is_outer])` | Polygon hull simplification |
-| `STX_Concavehullofpolygons(geom, ratio [, holes])` | Concave hull of polygon set |
+| `STX_SimplifyPreserveTopology(geom, tol)` | Topology-preserving simplification |
+| `STX_UnaryUnion(geom)` | Union of all components of a geometry |
+| `STX_ClipByRect(geom, xmin, ymin, xmax, ymax)` | Fast clipping by rectangle |
+| `STX_ReducePrecision(geom, gridsize)` | Reduce coordinate precision (validity preserving) |
+| `STX_MaximumInscribedCircle(geom, tolerance)` | Maximum inscribed circle |
+| `STX_MinimumWidth(geom)` | Minimum width of a geometry |
+| `STX_SimplifyPolygonHull(geom, frac [, is_outer])` | Polygon hull simplification |
+| `STX_ConcaveHullOfPolygons(geom, ratio [, holes])` | Concave hull of polygon set |
 
 ### I/O Format Conversion
 
 | Function | Description |
 |---|---|
-| `STX_Asencodedpolyline(geom [, prec])` | Geometry to Google Encoded Polyline |
-| `STX_Linefromenccodedpolyline(text [, srid [, prec]])` | Encoded Polyline to LineString |
-| `STX_Assvg(geom [, rel [, prec]])` | Geometry to SVG path data |
-| `STX_Askml(geom [, prec])` | Geometry to KML |
-| `STX_Asewkt(geom)` | Geometry to EWKT (Extended WKT) |
-| `STX_Geomfromewkt(text)` | EWKT to Geometry |
+| `STX_AsEncodedPolyline(geom [, prec])` | Geometry to Google Encoded Polyline |
+| `STX_LineFromEnccodedPolyline(text [, srid [, prec]])` | Encoded Polyline to LineString |
+| `STX_AsSvg(geom [, rel [, prec]])` | Geometry to SVG path data |
+| `STX_AsKml(geom [, prec])` | Geometry to KML |
+| `STX_AsEwkt(geom)` | Geometry to EWKT (Extended WKT) |
+| `STX_GeomFromEwkt(text)` | EWKT to Geometry |
 
 See [Function Reference](plugins/spatial_plugin/docs/function_reference.md) for full documentation.
 

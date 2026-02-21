@@ -32,8 +32,8 @@
 | `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 | |
 | `STX_MakePolygon(ring [, inner_rings])` | LineString から Polygon を構築 | |
 | `STX_GeneratePoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 | |
-| `STX_Minimumboundingcircle(geom [, segs])` | 最小外接円（Polygon として返却） | |
-| `STX_Squaregrid(size, geom)` | バウンディングボックスを覆う矩形グリッド | |
+| `STX_MinimumBoundingCircle(geom [, segs])` | 最小外接円（Polygon として返却） | |
+| `STX_SquareGrid(size, geom)` | バウンディングボックスを覆う矩形グリッド | |
 | `STX_Hexgrid(size, geom)` | バウンディングボックスを覆う六角形グリッド | |
 
 ## 座標変換
@@ -43,44 +43,44 @@
 | `STX_Translate(geom, dx, dy)` | ジオメトリを平行移動 | https://sakaik.hateblo.jp/entry/20260220/STX_Translate_func |
 | `STX_Translate_latlon(geom, dlat, dlon)` | 緯度経度順で平行移動（Geographic専用）(独自実装) | https://sakaik.hateblo.jp/entry/20260220/STX_Translate_func |
 | `STX_Scale(geom, sx, sy)` | ジオメトリを拡大・縮小 | |
-| `STX_Rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） | |
+| `STX_Rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） | https://sakaik.hateblo.jp/entry/20260221/STX_Rotate_func |
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | 一般2Dアフィン変換 | |
-| `STX_Reverse(geom)` | 頂点の順序を反転 | |
+| `STX_Reverse(geom)` | 頂点の順序を反転 | https://sakaik.hateblo.jp/entry/20260221/STX_Reverse_func |
 | `STX_Snaptogrid(geom, size [, size_y])` | 座標をグリッドにスナップ | |
-| `STX_Removerepeatedpoints(geom [, tol])` | 連続する重複頂点を除去 | |
+| `STX_RemoveRepeatedPoints(geom [, tol])` | 連続する重複頂点を除去 | |
 | `STX_Segmentize(geom, max_length)` | 長い辺を分割（頂点追加） | |
 
 ## GEOS ベース関数
 
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
-| `STX_Makevalid(geom)` | 不正ジオメトリの修復 | |
-| `STX_Linemerge(geom)` | 接続する LineString の結合 | |
+| `STX_MakeValid(geom)` | 不正ジオメトリの修復 | |
+| `STX_LineMerge(geom)` | 接続する LineString の結合 | |
 | `STX_Voronoi(geom [, tolerance [, envelope]])` | ボロノイ図 | |
 | `STX_Delaunay(geom [, tolerance [, edges_only]])` | ドロネー三角形分割 | |
-| `STX_Offsetcurve(geom, dist [, quad_segs [, join [, mitre]]])` | ラインの平行オフセット | |
-| `STX_Concavehull(geom, ratio [, allow_holes])` | 凹包 | |
+| `STX_OffsetCurve(geom, dist [, quad_segs [, join [, mitre]]])` | ラインの平行オフセット | |
+| `STX_ConcaveHull(geom, ratio [, allow_holes])` | 凹包 | |
 | `STX_Snap(g1, g2, tolerance)` | 頂点を別ジオメトリにスナップ | |
 | `STX_Polygonize(geom)` | ラインワークからポリゴン構築 | |
-| `STX_Buildarea(geom)` | ラインワークから面構築（内部リングは穴） | |
-| `STX_Sharedpaths(g1, g2)` | 2つの線形ジオメトリの共有パス抽出 | |
+| `STX_BuildArea(geom)` | ラインワークから面構築（内部リングは穴） | |
+| `STX_SharedPaths(g1, g2)` | 2つの線形ジオメトリの共有パス抽出 | |
 | `STX_Node(geom)` | ラインのノード化（交差点で分割） | |
-| `STX_Simplifypreservetopology(geom, tol)` | トポロジ保持簡略化 | |
-| `STX_Unaryunion(geom)` | ジオメトリ構成要素の Union | |
-| `STX_Clipbyrect(geom, xmin, ymin, xmax, ymax)` | 矩形による高速クリッピング | |
-| `STX_Reduceprecision(geom, gridsize)` | 精度削減（妥当性保証付き） | |
-| `STX_Maximuminscribedcircle(geom, tolerance)` | 最大内接円 | |
-| `STX_Minimumwidth(geom)` | ジオメトリの最小幅 | |
-| `STX_Simplifypolygonhull(geom, frac [, is_outer])` | ポリゴン Hull 簡略化 | |
-| `STX_Concavehullofpolygons(geom, ratio [, holes])` | ポリゴン集合の凹包 | |
+| `STX_SimplifyPreserveTopology(geom, tol)` | トポロジ保持簡略化 | |
+| `STX_UnaryUnion(geom)` | ジオメトリ構成要素の Union | |
+| `STX_ClipByRect(geom, xmin, ymin, xmax, ymax)` | 矩形による高速クリッピング | |
+| `STX_ReducePrecision(geom, gridsize)` | 精度削減（妥当性保証付き） | |
+| `STX_MaximumInscribedCircle(geom, tolerance)` | 最大内接円 | https://sakaik.hateblo.jp/entry/20260221/STX_MaximumInscribedCircle_func |
+| `STX_MinimumWidth(geom)` | ジオメトリの最小幅 | |
+| `STX_SimplifyPolygonHull(geom, frac [, is_outer])` | ポリゴン Hull 簡略化 | |
+| `STX_ConcaveHullOfPolygons(geom, ratio [, holes])` | ポリゴン集合の凹包 | |
 
 ## 入出力フォーマット変換
 
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
-| `STX_Asencodedpolyline(geom [, prec])` | Google Encoded Polyline に変換 | |
-| `STX_Linefromenccodedpolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 | |
-| `STX_Assvg(geom [, rel [, prec]])` | SVG パスデータに変換 | |
-| `STX_Askml(geom [, prec])` | KML に変換 | |
-| `STX_Asewkt(geom)` | EWKT（Extended WKT）に変換 | |
-| `STX_Geomfromewkt(text)` | EWKT からジオメトリを構築 | |
+| `STX_AsEncodedPolyline(geom [, prec])` | Google Encoded Polyline に変換 | |
+| `STX_LineFromEnccodedPolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 | |
+| `STX_AsSvg(geom [, rel [, prec]])` | SVG パスデータに変換 | |
+| `STX_AsKml(geom [, prec])` | KML に変換 | |
+| `STX_AsEwkt(geom)` | EWKT（Extended WKT）に変換 | |
+| `STX_GeomFromEwkt(text)` | EWKT からジオメトリを構築 | |
