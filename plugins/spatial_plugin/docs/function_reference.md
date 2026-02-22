@@ -549,8 +549,8 @@ SELECT ST_AsText(STX_Linesubstring(
 
 ### STX_Angle
 
-3つの点 P1, P2, P3 において、P2 を頂点とする角度をラジアンで返す。
-Returns the angle at P2 formed by the rays P2→P1 and P2→P3, in radians.
+3つの点 P1, P2, P3 において、P2 を頂点とする角度をラジアンで返す。Geographic 座標系の場合も球面計算は行わず、与えられた座標値を平面上の座標として計算する。
+Returns the angle at P2 formed by the rays P2→P1 and P2→P3, in radians. Even for geographic coordinate systems, this function performs planar calculation using the coordinate values as-is, without spherical geometry.
 
 ```sql
 STX_Angle(point1, point2, point3) -> DOUBLE

@@ -10,8 +10,8 @@
 | `STX_CoveredBy(g1, g2)` | g1 が g2 に覆われているか判定 | https://sakaik.hateblo.jp/entry/20260219/STX_CoveredBy_Covers_func |
 | `STX_Covers(g1, g2)` | g1 が g2 を覆っているか判定 | https://sakaik.hateblo.jp/entry/20260219/STX_CoveredBy_Covers_func |
 | `STX_Dwithin(g1, g2, dist)` | 2つのジオメトリ間の距離が閾値以内か判定 | |
-| `STX_Azimuth(p1, p2)` | p1 から p2 への方位角（ラジアン、北から時計回り） | |
-| `STX_Angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 | |
+| `STX_Azimuth(p1, p2)` | p1 から p2 への方位角（ラジアン、北から時計回り） | https://sakaik.hateblo.jp/entry/20260222/STX_Azimuth_func |
+| `STX_Angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 | https://sakaik.hateblo.jp/entry/20260222/STX_Angle_func |
 | `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す | |
 | `STX_RelateMatch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 | |
 | `STX_NPoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） |https://sakaik.hateblo.jp/entry/20260219/STX_NPoints_func |
