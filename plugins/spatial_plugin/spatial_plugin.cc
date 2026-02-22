@@ -4698,6 +4698,139 @@ static void stx_shortestline_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
+// =============================================================================
+// STX_dms2deg — DMS to decimal degrees
+// =============================================================================
+
+static bool stx_dms2deg_init(UDF_INIT *initid, UDF_ARGS *args,
+                             char *message) {
+  if (args->arg_count < 2 || args->arg_count > 3) {
+    snprintf(message, MYSQL_ERRMSG_SIZE,
+             "STX_dms2deg() requires 2 or 3 arguments: (degrees, minutes [, seconds])");
+    return true;
+  }
+  for (unsigned i = 0; i < args->arg_count; i++)
+    args->arg_type[i] = REAL_RESULT;
+  initid->decimals = 31;
+  initid->maybe_null = true;
+  return false;
+}
+
+static double stx_dms2deg(UDF_INIT * /*initid*/, UDF_ARGS *args,
+                           unsigned char *is_null,
+                           unsigned char * /*error*/) {
+  if (!args->args[0] || !args->args[1]) {
+    *is_null = 1;
+    return 0;
+  }
+  double d = *reinterpret_cast<double *>(args->args[0]);
+  double m = *reinterpret_cast<double *>(args->args[1]);
+  double s = 0.0;
+  if (args->arg_count >= 3 && args->args[2])
+    s = *reinterpret_cast<double *>(args->args[2]);
+
+  double sign = (d < 0) ? -1.0 : 1.0;
+  double result = sign * (std::fabs(d) + m / 60.0 + s / 3600.0);
+  return result;
+}
+
+static void stx_dms2deg_deinit(UDF_INIT * /*initid*/) {}
+
+// =============================================================================
+// STX_deg2dms_deg — decimal degrees to DMS (degree part)
+// =============================================================================
+
+static bool stx_deg2dms_deg_init(UDF_INIT *initid, UDF_ARGS *args,
+                                 char *message) {
+  if (args->arg_count != 1) {
+    snprintf(message, MYSQL_ERRMSG_SIZE,
+             "STX_deg2dms_deg() requires exactly 1 argument");
+    return true;
+  }
+  args->arg_type[0] = REAL_RESULT;
+  initid->maybe_null = true;
+  return false;
+}
+
+static long long stx_deg2dms_deg(UDF_INIT * /*initid*/, UDF_ARGS *args,
+                                  unsigned char *is_null,
+                                  unsigned char * /*error*/) {
+  if (!args->args[0]) {
+    *is_null = 1;
+    return 0;
+  }
+  double d = *reinterpret_cast<double *>(args->args[0]);
+  double sign = (d < 0) ? -1.0 : 1.0;
+  long long deg = static_cast<long long>(std::floor(std::fabs(d)));
+  return static_cast<long long>(sign) * deg;
+}
+
+static void stx_deg2dms_deg_deinit(UDF_INIT * /*initid*/) {}
+
+// =============================================================================
+// STX_deg2dms_min — decimal degrees to DMS (minute part)
+// =============================================================================
+
+static bool stx_deg2dms_min_init(UDF_INIT *initid, UDF_ARGS *args,
+                                 char *message) {
+  if (args->arg_count != 1) {
+    snprintf(message, MYSQL_ERRMSG_SIZE,
+             "STX_deg2dms_min() requires exactly 1 argument");
+    return true;
+  }
+  args->arg_type[0] = REAL_RESULT;
+  initid->maybe_null = true;
+  return false;
+}
+
+static long long stx_deg2dms_min(UDF_INIT * /*initid*/, UDF_ARGS *args,
+                                  unsigned char *is_null,
+                                  unsigned char * /*error*/) {
+  if (!args->args[0]) {
+    *is_null = 1;
+    return 0;
+  }
+  double d = *reinterpret_cast<double *>(args->args[0]);
+  double frac = std::fabs(d) - std::floor(std::fabs(d));
+  double min_total = frac * 60.0;
+  return static_cast<long long>(std::floor(min_total));
+}
+
+static void stx_deg2dms_min_deinit(UDF_INIT * /*initid*/) {}
+
+// =============================================================================
+// STX_deg2dms_sec — decimal degrees to DMS (second part)
+// =============================================================================
+
+static bool stx_deg2dms_sec_init(UDF_INIT *initid, UDF_ARGS *args,
+                                 char *message) {
+  if (args->arg_count != 1) {
+    snprintf(message, MYSQL_ERRMSG_SIZE,
+             "STX_deg2dms_sec() requires exactly 1 argument");
+    return true;
+  }
+  args->arg_type[0] = REAL_RESULT;
+  initid->decimals = 31;
+  initid->maybe_null = true;
+  return false;
+}
+
+static double stx_deg2dms_sec(UDF_INIT * /*initid*/, UDF_ARGS *args,
+                               unsigned char *is_null,
+                               unsigned char * /*error*/) {
+  if (!args->args[0]) {
+    *is_null = 1;
+    return 0;
+  }
+  double d = *reinterpret_cast<double *>(args->args[0]);
+  double frac = std::fabs(d) - std::floor(std::fabs(d));
+  double min_total = frac * 60.0;
+  double sec = (min_total - std::floor(min_total)) * 60.0;
+  return sec;
+}
+
+static void stx_deg2dms_sec_deinit(UDF_INIT * /*initid*/) {}
+
 }  // extern "C"
 
 // =============================================================================
@@ -4840,6 +4973,15 @@ static const udf_entry udf_table[] = {
      stx_isring_init, stx_isring_deinit},
     {"stx_shortestline", STRING_RESULT, (Udf_func_any)stx_shortestline,
      stx_shortestline_init, stx_shortestline_deinit},
+    // DMS conversion functions
+    {"stx_dms2deg", REAL_RESULT, (Udf_func_any)stx_dms2deg,
+     stx_dms2deg_init, stx_dms2deg_deinit},
+    {"stx_deg2dms_deg", INT_RESULT, (Udf_func_any)stx_deg2dms_deg,
+     stx_deg2dms_deg_init, stx_deg2dms_deg_deinit},
+    {"stx_deg2dms_min", INT_RESULT, (Udf_func_any)stx_deg2dms_min,
+     stx_deg2dms_min_init, stx_deg2dms_min_deinit},
+    {"stx_deg2dms_sec", REAL_RESULT, (Udf_func_any)stx_deg2dms_sec,
+     stx_deg2dms_sec_init, stx_deg2dms_sec_deinit},
     {nullptr, INVALID_RESULT, nullptr, nullptr, nullptr},
 };
 

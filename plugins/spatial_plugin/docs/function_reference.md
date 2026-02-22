@@ -96,6 +96,10 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Points](#stx_points) | GEOMETRY | 全頂点抽出 / Extract all vertices as MultiPoint |
 | [STX_IsRing](#stx_isring) | INTEGER | 閉環判定 / Test if LineString is a ring (GEOS) |
 | [STX_ShortestLine](#stx_shortestline) | GEOMETRY | 最短線分 / Shortest line between geometries (GEOS) |
+| [STX_dms2deg](#stx_dms2deg) | DOUBLE | 度分秒→十進度変換（独自関数） / DMS to decimal degrees (original) |
+| [STX_deg2dms_deg](#stx_deg2dms_deg) | INTEGER | 十進度→度の部分（独自関数） / Degree part of DMS (original) |
+| [STX_deg2dms_min](#stx_deg2dms_min) | INTEGER | 十進度→分の部分（独自関数） / Minute part of DMS (original) |
+| [STX_deg2dms_sec](#stx_deg2dms_sec) | DOUBLE | 十進度→秒の部分（独自関数） / Second part of DMS (original) |
 
 ---
 
@@ -2626,6 +2630,10 @@ ORDER BY UDF_NAME;
 | STX_Points                     | char            |
 | STX_Isring                     | integer         |
 | STX_Shortestline               | char            |
+| STX_dms2deg                    | double          |
+| STX_deg2dms_deg                | integer         |
+| STX_deg2dms_min                | integer         |
+| STX_deg2dms_sec                | double          |
 +--------------------------------+-----------------+
 ```
 
@@ -2830,6 +2838,142 @@ SELECT ST_Length(STX_Shortestline(
 
 - 既存の `STX_Closestpoint` は一方のジオメトリ上の最近接**点**を返すが、`STX_Shortestline` は両方のジオメトリ上の最近接点を結ぶ**線分**を返す。
   `STX_Closestpoint` returns the nearest **point** on one geometry, while `STX_Shortestline` returns the **line segment** connecting the nearest points on both geometries.
+
+---
+
+### STX_dms2deg
+
+度分秒（DMS）を十進度に変換する。PostGIS・MySQL に同等関数はなく、本プラグイン独自の関数。
+Converts degrees, minutes, seconds to decimal degrees. This is an original function with no equivalent in PostGIS or MySQL.
+
+```sql
+STX_dms2deg(degrees DOUBLE, minutes DOUBLE, seconds DOUBLE) → DOUBLE
+```
+
+#### 引数 (Parameters)
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| degrees | DOUBLE | 度（負の値で西経・南緯） / Degrees (negative for west longitude / south latitude) |
+| minutes | DOUBLE | 分（小数可） / Minutes (may include decimals) |
+| seconds | DOUBLE | 秒（NULL の場合 0 として扱う） / Seconds (NULL treated as 0) |
+
+#### 計算式 (Formula)
+
+`sign(degrees) × (|degrees| + minutes/60 + seconds/3600)`
+
+#### 使用例 (Examples)
+
+```sql
+-- 134°32'6" → 134.535
+SELECT STX_dms2deg(134, 32, 6);
+-- 134.535
+
+-- 負の値（南緯）
+SELECT STX_dms2deg(-35, 40, 52.4496);
+-- -35.681236
+
+-- 秒を省略（分に小数を含む）
+SELECT STX_dms2deg(134, 32.1, NULL);
+-- 134.535
+```
+
+---
+
+### STX_deg2dms_deg
+
+十進度から度の部分（整数）を返す。本プラグイン独自の関数。
+Returns the degree part (integer) of a decimal degree value. Original function.
+
+```sql
+STX_deg2dms_deg(decimal_degrees DOUBLE) → INTEGER
+```
+
+#### 備考 (Notes)
+
+- 負の値の場合、符号はこの関数の戻り値にのみ付く（min/sec は常に正）。
+  For negative values, the sign applies only to this function's return value (min/sec are always positive).
+
+#### 使用例 (Examples)
+
+```sql
+SELECT STX_deg2dms_deg(134.535);
+-- 134
+
+SELECT STX_deg2dms_deg(-134.535);
+-- -134
+```
+
+---
+
+### STX_deg2dms_min
+
+十進度から分の部分（整数）を返す。本プラグイン独自の関数。
+Returns the minute part (integer) of a decimal degree value. Original function.
+
+```sql
+STX_deg2dms_min(decimal_degrees DOUBLE) → INTEGER
+```
+
+#### 備考 (Notes)
+
+- 入力が負でも戻り値は常に正。
+  Return value is always non-negative, even for negative input.
+
+#### 使用例 (Examples)
+
+```sql
+SELECT STX_deg2dms_min(134.535);
+-- 32
+
+SELECT STX_deg2dms_min(-134.535);
+-- 32
+```
+
+---
+
+### STX_deg2dms_sec
+
+十進度から秒の部分（DOUBLE）を返す。本プラグイン独自の関数。
+Returns the second part (DOUBLE) of a decimal degree value. Original function.
+
+```sql
+STX_deg2dms_sec(decimal_degrees DOUBLE) → DOUBLE
+```
+
+#### 備考 (Notes)
+
+- 入力が負でも戻り値は常に正。
+  Return value is always non-negative, even for negative input.
+- 浮動小数点演算の特性上、微小な誤差が生じる場合がある。
+  Due to floating-point arithmetic, minor rounding errors may occur.
+
+#### 使用例 (Examples)
+
+```sql
+SELECT STX_deg2dms_sec(134.535);
+-- 6.0 (approximately)
+
+-- 東京駅の緯度 35.681236° → 35° 40' 52.4496"
+SELECT STX_deg2dms_deg(35.681236) AS deg,
+       STX_deg2dms_min(35.681236) AS min,
+       STX_deg2dms_sec(35.681236) AS sec;
+-- deg=35, min=40, sec≈52.4496
+```
+
+#### 関連関数 (Related Functions)
+
+- `STX_dms2deg` — 逆変換（DMS → 十進度） / Reverse conversion (DMS to decimal degrees)
+- 3関数を組み合わせることで十進度をDMS表記に変換可能:
+  Combine the three functions to convert decimal degrees to DMS notation:
+  ```sql
+  SELECT CONCAT(
+    STX_deg2dms_deg(35.681236), '° ',
+    STX_deg2dms_min(35.681236), ''' ',
+    ROUND(STX_deg2dms_sec(35.681236), 2), '"'
+  );
+  -- 35° 40' 52.45"
+  ```
 
 ---
 

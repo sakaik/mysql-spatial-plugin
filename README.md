@@ -91,6 +91,15 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | `STX_AsEwkt(geom)` | Geometry to EWKT (Extended WKT) |
 | `STX_GeomFromEwkt(text)` | EWKT to Geometry |
 
+### Coordinate Utilities
+
+| Function | Description |
+|---|---|
+| `STX_dms2deg(d, m, s)` | DMS to decimal degrees (original) |
+| `STX_deg2dms_deg(d)` | Degree part of decimal degrees (original) |
+| `STX_deg2dms_min(d)` | Minute part of decimal degrees (original) |
+| `STX_deg2dms_sec(d)` | Second part of decimal degrees (original) |
+
 See [Function Reference](plugins/spatial_plugin/docs/function_reference.md) for full documentation.
 
 ## Requirements

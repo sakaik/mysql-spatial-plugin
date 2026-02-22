@@ -84,3 +84,12 @@
 | `STX_AsKml(geom [, prec])` | KML に変換 | |
 | `STX_AsEwkt(geom)` | EWKT（Extended WKT）に変換 | |
 | `STX_GeomFromEwkt(text)` | EWKT からジオメトリを構築 | |
+
+## 座標ユーティリティ
+
+| 関数 | 説明 | 実行例URL |
+|---|---|---|
+| `STX_dms2deg(d, m, s)` | 度分秒→十進度変換(独自実装) | https://sakaik.hateblo.jp/entry/20260222/STX_dms2deg_STX_deg2dms_func |
+| `STX_deg2dms_deg(d)` | 十進度→度の部分(独自実装) | https://sakaik.hateblo.jp/entry/20260222/STX_dms2deg_STX_deg2dms_func |
+| `STX_deg2dms_min(d)` | 十進度→分の部分(独自実装) | https://sakaik.hateblo.jp/entry/20260222/STX_dms2deg_STX_deg2dms_func |
+| `STX_deg2dms_sec(d)` | 十進度→秒の部分(独自実装) | https://sakaik.hateblo.jp/entry/20260222/STX_dms2deg_STX_deg2dms_func |

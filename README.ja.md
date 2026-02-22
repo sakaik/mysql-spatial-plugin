@@ -91,6 +91,15 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_AsEwkt(geom)` | EWKT（Extended WKT）に変換 |
 | `STX_GeomFromEwkt(text)` | EWKT からジオメトリを構築 |
 
+### 座標ユーティリティ
+
+| 関数 | 説明 |
+|---|---|
+| `STX_dms2deg(d, m, s)` | 度分秒→十進度変換(独自実装) |
+| `STX_deg2dms_deg(d)` | 十進度→度の部分(独自実装) |
+| `STX_deg2dms_min(d)` | 十進度→分の部分(独自実装) |
+| `STX_deg2dms_sec(d)` | 十進度→秒の部分(独自実装) |
+
 詳細は [関数リファレンス](plugins/spatial_plugin/docs/function_reference.md) を参照してください。
 
 ## 動作要件

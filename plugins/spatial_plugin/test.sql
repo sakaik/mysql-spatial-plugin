@@ -2389,6 +2389,72 @@ CALL assert_error(
   3516);
 
 -- =============================================================================
+-- STX_dms2deg / STX_deg2dms_deg / STX_deg2dms_min / STX_deg2dms_sec
+-- =============================================================================
+
+-- stx_dms2deg: basic conversion
+CALL assert_eq_double('dms2deg: 134d 32m 6s', stx_dms2deg(134, 32, 6), 134.535, 0.0001);
+
+-- stx_dms2deg: zero minutes and seconds
+CALL assert_eq_double('dms2deg: 45d 0m 0s', stx_dms2deg(45, 0, 0), 45.0, 0.0001);
+
+-- stx_dms2deg: fractional minutes (no seconds)
+CALL assert_eq_double('dms2deg: 134d 32.1m NULL s', stx_dms2deg(134, 32.1, NULL), 134.535, 0.0001);
+
+-- stx_dms2deg: seconds omitted (NULL)
+CALL assert_eq_double('dms2deg: 90d 30m NULL s', stx_dms2deg(90, 30, NULL), 90.5, 0.0001);
+
+-- stx_dms2deg: negative degrees
+CALL assert_eq_double('dms2deg: -134d 32m 6s', stx_dms2deg(-134, 32, 6), -134.535, 0.0001);
+
+-- stx_dms2deg: NULL input returns NULL
+CALL assert_eq_double('dms2deg: NULL d returns NULL', stx_dms2deg(NULL, 30, 0), NULL, 0);
+CALL assert_eq_double('dms2deg: NULL m returns NULL', stx_dms2deg(90, NULL, 0), NULL, 0);
+
+-- stx_dms2deg: roundtrip with deg2dms
+CALL assert_eq_double('dms2deg: roundtrip 139.745451',
+  stx_dms2deg(stx_deg2dms_deg(139.745451), stx_deg2dms_min(139.745451), stx_deg2dms_sec(139.745451)),
+  139.745451, 0.000001);
+
+-- stx_deg2dms_deg: positive value
+CALL assert_eq_int('deg2dms_deg: 134.535 -> 134', stx_deg2dms_deg(134.535), 134);
+
+-- stx_deg2dms_deg: negative value (sign on deg only)
+CALL assert_eq_int('deg2dms_deg: -134.535 -> -134', stx_deg2dms_deg(-134.535), -134);
+
+-- stx_deg2dms_deg: zero
+CALL assert_eq_int('deg2dms_deg: 0.5 -> 0', stx_deg2dms_deg(0.5), 0);
+
+-- stx_deg2dms_deg: NULL input
+CALL assert_eq_int('deg2dms_deg: NULL -> NULL', stx_deg2dms_deg(NULL), NULL);
+
+-- stx_deg2dms_min: positive value
+CALL assert_eq_int('deg2dms_min: 134.535 -> 32', stx_deg2dms_min(134.535), 32);
+
+-- stx_deg2dms_min: negative value (always positive)
+CALL assert_eq_int('deg2dms_min: -134.535 -> 32', stx_deg2dms_min(-134.535), 32);
+
+-- stx_deg2dms_min: NULL input
+CALL assert_eq_int('deg2dms_min: NULL -> NULL', stx_deg2dms_min(NULL), NULL);
+
+-- stx_deg2dms_sec: positive value
+CALL assert_eq_double('deg2dms_sec: 134.535 -> ~6.0', stx_deg2dms_sec(134.535), 6.0, 0.001);
+
+-- stx_deg2dms_sec: negative value (always positive)
+CALL assert_eq_double('deg2dms_sec: -134.535 -> ~6.0', stx_deg2dms_sec(-134.535), 6.0, 0.001);
+
+-- stx_deg2dms_sec: NULL input
+CALL assert_eq_double('deg2dms_sec: NULL -> NULL', stx_deg2dms_sec(NULL), NULL, 0);
+
+-- stx_deg2dms: Tokyo Station (35.681236, 139.767125)
+CALL assert_eq_int('deg2dms: Tokyo lat deg', stx_deg2dms_deg(35.681236), 35);
+CALL assert_eq_int('deg2dms: Tokyo lat min', stx_deg2dms_min(35.681236), 40);
+CALL assert_eq_double('deg2dms: Tokyo lat sec', stx_deg2dms_sec(35.681236), 52.4496, 0.001);
+
+-- stx_dms2deg: back from Tokyo DMS
+CALL assert_eq_double('dms2deg: Tokyo lat roundtrip', stx_dms2deg(35, 40, 52.4496), 35.681236, 0.000001);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 
