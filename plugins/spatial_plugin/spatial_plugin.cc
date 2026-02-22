@@ -7,6 +7,7 @@
 #include <mysql/service_plugin_registry.h>
 #include <mysql/components/my_service.h>
 #include <mysql/components/services/udf_registration.h>
+#include <mysql/components/services/udf_metadata.h>
 #include <mysql/components/services/mysql_runtime_error_service.h>
 #include <mysqld_error.h>
 #include <string.h>
@@ -55,6 +56,18 @@ static const char *geometry_type_name(GeometryType t) {
     case GeometryType::MultiPolygon: return "MULTIPOLYGON";
     case GeometryType::GeometryCollection: return "GEOMETRYCOLLECTION";
     default: return "UNKNOWN";
+  }
+}
+
+// Global pointer to udf_metadata service (for setting result charset)
+static SERVICE_TYPE(mysql_udf_metadata) *udf_metadata_svc = nullptr;
+
+// Set UDF result charset to utf8mb4 (call from _init functions of text-returning UDFs)
+static void set_result_charset_utf8(UDF_INIT *initid) {
+  if (udf_metadata_svc) {
+    const char *charset = "utf8mb4";
+    udf_metadata_svc->result_set(initid, "charset",
+                                  static_cast<void *>(const_cast<char *>(charset)));
   }
 }
 
@@ -1506,6 +1519,7 @@ static bool stx_relate_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
   args->arg_type[1] = STRING_RESULT;
   initid->maybe_null = 1;
   initid->max_length = 9;
+  set_result_charset_utf8(initid);
   return false;
 }
 
@@ -2924,6 +2938,7 @@ static bool stx_asencodedpolyline_init(UDF_INIT *initid, UDF_ARGS *args,
   if (args->arg_count == 2) args->arg_type[1] = INT_RESULT;
   initid->maybe_null = 1;
   initid->ptr = nullptr;
+  set_result_charset_utf8(initid);
   return false;
 }
 
@@ -2960,15 +2975,15 @@ static void stx_asencodedpolyline_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
-// ----- stx_linefromenccodedpolyline ------------------------------------------
+// ----- stx_linefromencodedpolyline ------------------------------------------
 // Decodes a Google Encoded Polyline string to a LineString.
-// stx_linefromenccodedpolyline(text [, srid [, precision]])
+// stx_linefromencodedpolyline(text [, srid [, precision]])
 
-static bool stx_linefromenccodedpolyline_init(UDF_INIT *initid, UDF_ARGS *args,
+static bool stx_linefromencodedpolyline_init(UDF_INIT *initid, UDF_ARGS *args,
                                                char *msg) {
   if (args->arg_count < 1 || args->arg_count > 3) {
     strcpy(msg,
-           "stx_linefromenccodedpolyline() requires 1-3 arguments "
+           "stx_linefromencodedpolyline() requires 1-3 arguments "
            "(text [, srid [, precision]])");
     return true;
   }
@@ -2980,7 +2995,7 @@ static bool stx_linefromenccodedpolyline_init(UDF_INIT *initid, UDF_ARGS *args,
   return false;
 }
 
-static char *stx_linefromenccodedpolyline(UDF_INIT *initid, UDF_ARGS *args,
+static char *stx_linefromencodedpolyline(UDF_INIT *initid, UDF_ARGS *args,
                                            char *result, unsigned long *length,
                                            char *is_null, char *error) {
   if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
@@ -3011,7 +3026,7 @@ static char *stx_linefromenccodedpolyline(UDF_INIT *initid, UDF_ARGS *args,
   return return_wkb(initid, wkb, result, length);
 }
 
-static void stx_linefromenccodedpolyline_deinit(UDF_INIT *initid) {
+static void stx_linefromencodedpolyline_deinit(UDF_INIT *initid) {
   if (initid->ptr) free(initid->ptr);
 }
 
@@ -3030,6 +3045,7 @@ static bool stx_assvg_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
   if (args->arg_count == 3) args->arg_type[2] = INT_RESULT;
   initid->maybe_null = 1;
   initid->ptr = nullptr;
+  set_result_charset_utf8(initid);
   return false;
 }
 
@@ -3076,6 +3092,7 @@ static bool stx_askml_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
   if (args->arg_count == 2) args->arg_type[1] = INT_RESULT;
   initid->maybe_null = 1;
   initid->ptr = nullptr;
+  set_result_charset_utf8(initid);
   return false;
 }
 
@@ -3117,6 +3134,7 @@ static bool stx_asewkt_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
   args->arg_type[0] = STRING_RESULT;
   initid->maybe_null = 1;
   initid->ptr = nullptr;
+  set_result_charset_utf8(initid);
   return false;
 }
 
@@ -4748,9 +4766,9 @@ static const udf_entry udf_table[] = {
     {"stx_asencodedpolyline", STRING_RESULT,
      (Udf_func_any)stx_asencodedpolyline, stx_asencodedpolyline_init,
      stx_asencodedpolyline_deinit},
-    {"stx_linefromenccodedpolyline", STRING_RESULT,
-     (Udf_func_any)stx_linefromenccodedpolyline,
-     stx_linefromenccodedpolyline_init, stx_linefromenccodedpolyline_deinit},
+    {"stx_linefromencodedpolyline", STRING_RESULT,
+     (Udf_func_any)stx_linefromencodedpolyline,
+     stx_linefromencodedpolyline_init, stx_linefromencodedpolyline_deinit},
     {"stx_assvg", STRING_RESULT, (Udf_func_any)stx_assvg, stx_assvg_init,
      stx_assvg_deinit},
     {"stx_askml", STRING_RESULT, (Udf_func_any)stx_askml, stx_askml_init,
@@ -4837,6 +4855,12 @@ static int spatial_plugin_init(void *p [[maybe_unused]]) {
   SERVICE_TYPE(registry) *reg = mysql_plugin_registry_acquire();
   if (!reg) return 1;
 
+  // Acquire udf_metadata service for setting result charset
+  my_h_service h_meta = nullptr;
+  if (!reg->acquire("mysql_udf_metadata", &h_meta) && h_meta)
+    udf_metadata_svc =
+        reinterpret_cast<SERVICE_TYPE(mysql_udf_metadata) *>(h_meta);
+
   bool err = false;
   {
     my_service<SERVICE_TYPE(udf_registration)> svc("udf_registration", reg);
@@ -4855,6 +4879,10 @@ static int spatial_plugin_init(void *p [[maybe_unused]]) {
         svc->udf_unregister(e->name, &wp);
     }
   }
+  if (err && h_meta) {
+    reg->release(h_meta);
+    udf_metadata_svc = nullptr;
+  }
   mysql_plugin_registry_release(reg);
   return err ? 1 : 0;
 }
@@ -4869,6 +4897,12 @@ static int spatial_plugin_deinit(void *p [[maybe_unused]]) {
       for (const udf_entry *e = udf_table; e->name; ++e)
         svc->udf_unregister(e->name, &wp);
     }
+  }
+  // Release udf_metadata service
+  if (udf_metadata_svc) {
+    reg->release(reinterpret_cast<my_h_service>(
+        const_cast<mysql_service_mysql_udf_metadata_t *>(udf_metadata_svc)));
+    udf_metadata_svc = nullptr;
   }
   mysql_plugin_registry_release(reg);
   return 0;
