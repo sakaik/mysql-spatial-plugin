@@ -63,7 +63,7 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Segmentize](#stx_segmentize) | GEOMETRY | 線分分割 / Split segments to max length |
 | [STX_GeneratePoints](#stx_generatepoints) | GEOMETRY | ランダム点生成 / Random points in polygon |
 | [STX_AsEncodedPolyline](#stx_asencodedpolyline) | STRING | Encoded Polyline 出力 / Geometry to Encoded Polyline |
-| [STX_LineFromEnccodedPolyline](#stx_linefromenccodedpolyline) | GEOMETRY | Encoded Polyline 入力 / Encoded Polyline to LineString |
+| [STX_LineFromEncodedPolyline](#stx_linefromencodedpolyline) | GEOMETRY | Encoded Polyline 入力 / Encoded Polyline to LineString |
 | [STX_AsSvg](#stx_assvg) | STRING | SVG 出力 / Geometry to SVG path data |
 | [STX_AsKml](#stx_askml) | STRING | KML 出力 / Geometry to KML |
 | [STX_AsEwkt](#stx_asewkt) | STRING | EWKT 出力 / Geometry to EWKT |
@@ -1379,13 +1379,13 @@ SELECT STX_Asencodedpolyline(
 
 ---
 
-### STX_LineFromEnccodedPolyline
+### STX_LineFromEncodedPolyline
 
 Google Encoded Polyline Algorithm Format の文字列から LineString ジオメトリを構築する。
 Creates a LineString geometry from a Google Encoded Polyline Algorithm Format string.
 
 ```sql
-STX_LineFromEnccodedPolyline(text [, srid [, precision]]) -> GEOMETRY (LineString)
+STX_LineFromEncodedPolyline(text [, srid [, precision]]) -> GEOMETRY (LineString)
 ```
 
 #### 引数 (Arguments)
@@ -1405,12 +1405,12 @@ STX_LineFromEnccodedPolyline(text [, srid [, precision]]) -> GEOMETRY (LineStrin
 
 ```sql
 -- デコード / Decode
-SELECT ST_AsText(STX_Linefromenccodedpolyline(
+SELECT ST_AsText(STX_Linefromencodedpolyline(
   '_p~iF~ps|U_ulLnnqC_mqNvxq`@', 0));
 -- LINESTRING(-120.2 38.5,-120.95 40.7,-126.453 43.252)
 
 -- ラウンドトリップ / Round-trip
-SELECT ST_AsText(STX_Linefromenccodedpolyline(
+SELECT ST_AsText(STX_Linefromencodedpolyline(
   STX_Asencodedpolyline(
     ST_GeomFromText('LINESTRING(-120.2 38.5, -120.95 40.7, -126.453 43.252)')),
   0));
@@ -2582,7 +2582,7 @@ ORDER BY UDF_NAME;
 | STX_Generatepoints             | char            |
 | STX_Geomfromewkt               | char            |
 | STX_Hexgrid                    | char            |
-| STX_Linefromenccodedpolyline   | char            |
+| STX_Linefromencodedpolyline   | char            |
 | STX_Linelocatepoint            | double          |
 | STX_Linesubstring              | char            |
 | STX_Makepoint                  | char            |

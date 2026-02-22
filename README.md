@@ -85,7 +85,7 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 | Function | Description |
 |---|---|
 | `STX_AsEncodedPolyline(geom [, prec])` | Geometry to Google Encoded Polyline |
-| `STX_LineFromEnccodedPolyline(text [, srid [, prec]])` | Encoded Polyline to LineString |
+| `STX_LineFromEncodedPolyline(text [, srid [, prec]])` | Encoded Polyline to LineString |
 | `STX_AsSvg(geom [, rel [, prec]])` | Geometry to SVG path data |
 | `STX_AsKml(geom [, prec])` | Geometry to KML |
 | `STX_AsEwkt(geom)` | Geometry to EWKT (Extended WKT) |

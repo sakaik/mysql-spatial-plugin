@@ -78,8 +78,8 @@
 
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
-| `STX_AsEncodedPolyline(geom [, prec])` | Google Encoded Polyline に変換 | |
-| `STX_LineFromEnccodedPolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 | |
+| `STX_AsEncodedPolyline(geom [, prec])` | Google Encoded Polyline に変換 | https://sakaik.hateblo.jp/entry/20260222/STX_LineFromEncodedPolyline_STX_AsEncodedPolyline_func |
+| `STX_LineFromEncodedPolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 | https://sakaik.hateblo.jp/entry/20260222/STX_LineFromEncodedPolyline_STX_AsEncodedPolyline_func |
 | `STX_AsSvg(geom [, rel [, prec]])` | SVG パスデータに変換 | |
 | `STX_AsKml(geom [, prec])` | KML に変換 | |
 | `STX_AsEwkt(geom)` | EWKT（Extended WKT）に変換 | |

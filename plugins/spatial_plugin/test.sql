@@ -1084,33 +1084,33 @@ CALL assert_eq_text(
   NULL);
 
 -- =============================================================================
--- stx_linefromenccodedpolyline
+-- stx_linefromencodedpolyline
 -- =============================================================================
 
 -- Decode Google example (default SRID 4326)
 CALL assert_eq_int(
-  'linefromenccodedpolyline: default SRID is 4326',
-  ST_SRID(stx_linefromenccodedpolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@')),
+  'linefromencodedpolyline: default SRID is 4326',
+  ST_SRID(stx_linefromencodedpolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@')),
   4326);
 
 -- Decode with explicit SRID 0
 CALL assert_eq_int(
-  'linefromenccodedpolyline: explicit SRID 0',
-  ST_SRID(stx_linefromenccodedpolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@', 0)),
+  'linefromencodedpolyline: explicit SRID 0',
+  ST_SRID(stx_linefromencodedpolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@', 0)),
   0);
 
 -- Round-trip encode/decode
 CALL assert_eq_text(
-  'linefromenccodedpolyline: round-trip',
-  ST_AsText(stx_linefromenccodedpolyline(
+  'linefromencodedpolyline: round-trip',
+  ST_AsText(stx_linefromencodedpolyline(
     stx_asencodedpolyline(ST_GeomFromText('LINESTRING(-120.2 38.5, -120.95 40.7, -126.453 43.252)')),
     0)),
   'LINESTRING(-120.2 38.5,-120.95 40.7,-126.453 43.252)');
 
 -- NULL input
 CALL assert_eq_text(
-  'linefromenccodedpolyline: NULL returns NULL',
-  ST_AsText(stx_linefromenccodedpolyline(NULL)),
+  'linefromencodedpolyline: NULL returns NULL',
+  ST_AsText(stx_linefromencodedpolyline(NULL)),
   NULL);
 
 -- =============================================================================

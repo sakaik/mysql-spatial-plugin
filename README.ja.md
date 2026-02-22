@@ -85,7 +85,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | 関数 | 説明 |
 |---|---|
 | `STX_AsEncodedPolyline(geom [, prec])` | Google Encoded Polyline に変換 |
-| `STX_LineFromEnccodedPolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 |
+| `STX_LineFromEncodedPolyline(text [, srid [, prec]])` | Encoded Polyline から LineString を構築 |
 | `STX_AsSvg(geom [, rel [, prec]])` | SVG パスデータに変換 |
 | `STX_AsKml(geom [, prec])` | KML に変換 |
 | `STX_AsEwkt(geom)` | EWKT（Extended WKT）に変換 |
