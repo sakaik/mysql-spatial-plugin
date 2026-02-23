@@ -6,6 +6,8 @@ Motto: *"Imperfect beats unavailable."*
 
 Provides GIS functions missing from MySQL, including distance-based queries, spatial relationships (DE-9IM), coordinate transformations, I/O format conversions, and more. Supports Cartesian (including projected CRS such as UTM) and Geographic (WGS84, etc.) coordinate systems.
 
+For testing status and known limitations of each function, see [CHECKLIST.md](CHECKLIST.md).
+
 ## Functions (58)
 
 ### Spatial Measurement & Predicates
