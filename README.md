@@ -8,7 +8,7 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 
 For testing status and known limitations of each function, see [CHECKLIST.md](CHECKLIST.md).
 
-## Functions (58)
+## Functions (62)
 
 ### Spatial Measurement & Predicates
 
