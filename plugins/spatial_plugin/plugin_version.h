@@ -17,6 +17,6 @@
 // ---- Metadata ----
 #define STX_PLUGIN_REQUIRES    "8.0"  // minimum MySQL version
 #define STX_PLUGIN_AUTHOR      "sakaik"
-#define STX_PLUGIN_DESCRIPTION "Spatial Functions Extensions(STX_*) powered by Boost.Geometry"
+#define STX_PLUGIN_DESCRIPTION "Spatial Functions Extensions(STX_*) powered by Boost.Geometry and GEOS"
 
 #endif
