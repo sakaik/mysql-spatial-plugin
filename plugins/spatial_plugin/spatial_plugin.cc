@@ -257,6 +257,39 @@ static double line_locate_point_impl(const LinestringT &line,
 }
 
 // ===== LineSubstring (cartesian) =============================================
+// Returns the point at a given fraction along a linestring.
+
+template <typename PointT, typename LinestringT>
+static PointT line_interpolate_impl(const LinestringT &line, double frac) {
+  PointT result;
+  double total_len = bg::length(line);
+  if (total_len == 0.0 || line.size() < 2) {
+    bg::set<0>(result, bg::get<0>(line[0]));
+    bg::set<1>(result, bg::get<1>(line[0]));
+    return result;
+  }
+  double target = frac * total_len;
+  double accumulated = 0.0;
+  for (size_t i = 0; i + 1 < line.size(); ++i) {
+    double seg_len = bg::distance(line[i], line[i + 1]);
+    double seg_end = accumulated + seg_len;
+    if (seg_end >= target) {
+      double t = (seg_len > 0.0) ? (target - accumulated) / seg_len : 0.0;
+      t = std::max(0.0, std::min(1.0, t));
+      bg::set<0>(result, bg::get<0>(line[i]) +
+                         t * (bg::get<0>(line[i + 1]) - bg::get<0>(line[i])));
+      bg::set<1>(result, bg::get<1>(line[i]) +
+                         t * (bg::get<1>(line[i + 1]) - bg::get<1>(line[i])));
+      return result;
+    }
+    accumulated = seg_end;
+  }
+  // fraction == 1.0: return last point
+  bg::set<0>(result, bg::get<0>(line[line.size() - 1]));
+  bg::set<1>(result, bg::get<1>(line[line.size() - 1]));
+  return result;
+}
+
 // Returns sub-linestring between fractions [start, end].
 
 template <typename PointT, typename LinestringT>
@@ -744,9 +777,30 @@ static char *stx_linesubstring(UDF_INIT *initid, UDF_ARGS *args, char *result,
   sf = std::max(0.0, std::min(1.0, sf));
   ef = std::max(0.0, std::min(1.0, ef));
 
+  if (sf > ef) {
+    my_error(ER_WRONG_ARGUMENTS, MYF(0),
+             "stx_linesubstring: start fraction must be <= end fraction");
+    *error = 1;
+    return nullptr;
+  }
+
   std::string wkb;
 
-  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+  if (sf == ef) {
+    // start == end: return POINT at that position
+    if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
+      auto &ls = std::get<Linestring>(*cv);
+      auto pt = line_interpolate_impl<Point, Linestring>(ls, sf);
+      wkb = write_point(r->srid, pt);
+    } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
+      auto &ls = std::get<GeoLinestring>(*gv);
+      auto pt = line_interpolate_impl<GeoPoint, GeoLinestring>(ls, sf);
+      wkb = write_point(r->srid, pt);
+    } else {
+      *error = 1;
+      return nullptr;
+    }
+  } else if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
     auto &ls = std::get<Linestring>(*cv);
     auto sub = line_substring_impl<Point, Linestring>(ls, sf, ef);
     wkb = write_linestring(r->srid, sub);

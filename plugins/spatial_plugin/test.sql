@@ -431,6 +431,34 @@ CALL assert_eq_text(
     0.25, 0.75)),
   'LINESTRING(5 0,10 0,10 5)');
 
+-- start == end returns POINT
+CALL assert_eq_text(
+  'linesubstring: start==end returns POINT',
+  ST_AsText(stx_linesubstring(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    0.5, 0.5)),
+  'POINT(5 0)');
+
+CALL assert_eq_text(
+  'linesubstring: start==end at 0 returns start point',
+  ST_AsText(stx_linesubstring(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    0.0, 0.0)),
+  'POINT(0 0)');
+
+CALL assert_eq_text(
+  'linesubstring: start==end at 1 returns end point',
+  ST_AsText(stx_linesubstring(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    1.0, 1.0)),
+  'POINT(10 0)');
+
+-- start > end raises error (ER_WRONG_ARGUMENTS = 1210)
+CALL assert_error(
+  'linesubstring: start > end raises ER_WRONG_ARGUMENTS',
+  'stx_linesubstring(ST_GeomFromText(''LINESTRING(0 0, 10 0)''), 0.7, 0.3)',
+  1210);
+
 -- =============================================================================
 -- stx_angle
 -- =============================================================================
