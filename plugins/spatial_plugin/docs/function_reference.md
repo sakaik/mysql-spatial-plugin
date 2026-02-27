@@ -471,13 +471,13 @@ SELECT STX_Linelocatepoint(
 
 -- ライン上にない点（垂線の足の位置を返す）
 -- Point not on line (returns perpendicular foot position)
-SELECT STX_Linelocatepoint(
+SELECT STX_LineLocatePoint(
   ST_GeomFromText('LINESTRING(0 0, 10 0)'),
   ST_GeomFromText('POINT(2.5 5)'));
 -- 0.25
 
 -- 複数セグメントのライン / Multi-segment line
-SELECT STX_Linelocatepoint(
+SELECT STX_LineLocatePoint(
   ST_GeomFromText('LINESTRING(0 0, 5 0, 10 0)'),
   ST_GeomFromText('POINT(5 0)'));
 -- 0.5
@@ -485,8 +485,8 @@ SELECT STX_Linelocatepoint(
 
 #### 備考 (Notes)
 
-- `STX_Linesubstring` と組み合わせることで、点の近傍でラインを分割する等の操作が可能。
-  Can be combined with `STX_Linesubstring` to split a line near a given point.
+- `STX_LineSubstring` と組み合わせることで、点の近傍でラインを分割する等の操作が可能。
+  Can be combined with `STX_LineSubstring` to split a line near a given point.
 - 第1引数が LineString 以外、または第2引数が Point 以外の場合は ERROR 3516 (`ER_UNEXPECTED_GEOMETRY_TYPE`)。
   Raises ERROR 3516 if the first argument is not a LineString or the second is not a Point.
 
