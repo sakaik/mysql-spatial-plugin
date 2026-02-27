@@ -2444,13 +2444,13 @@ A LineString representing the minimum width. Its length equals the minimum width
 ```sql
 -- 10x5 長方形の最小幅 → 5
 -- Minimum width of 10x5 rectangle → 5
-SELECT ST_Length(STX_Minimumwidth(
+SELECT ST_Length(STX_MinimumWidth(
   ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 0 5, 0 0))')));
 -- 5
 
 -- 10x10 正方形の最小幅 → 10
 -- Minimum width of 10x10 square → 10
-SELECT ST_Length(STX_Minimumwidth(
+SELECT ST_Length(STX_MinimumWidth(
   ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
 -- 10
 ```
