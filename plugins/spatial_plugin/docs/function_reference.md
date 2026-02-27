@@ -2836,8 +2836,8 @@ SELECT ST_Length(STX_Shortestline(
 
 #### 備考 (Notes)
 
-- 既存の `STX_Closestpoint` は一方のジオメトリ上の最近接**点**を返すが、`STX_Shortestline` は両方のジオメトリ上の最近接点を結ぶ**線分**を返す。
-  `STX_Closestpoint` returns the nearest **point** on one geometry, while `STX_Shortestline` returns the **line segment** connecting the nearest points on both geometries.
+- 既存の `STX_ClosestPoint` は一方のジオメトリ上の最近接**点**を返すが、`STX_ShortestLine` は両方のジオメトリ上の最近接点を結ぶ**線分**を返す。
+  `STX_ClosestPoint` returns the nearest **point** on one geometry, while `STX_ShortestLine` returns the **line segment** connecting the nearest points on both geometries.
 
 ---
 
