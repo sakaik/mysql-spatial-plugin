@@ -54,7 +54,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） |
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | 一般2Dアフィン変換 |
 | `STX_Reverse(geom)` | 頂点の順序を反転 |
-| `STX_Snaptogrid(geom, size [, size_y])` | 座標をグリッドにスナップ |
+| `STX_SnapToGrid(geom, size [, size_y])` | 座標をグリッドにスナップ |
 | `STX_RemoveRepeatedPoints(geom [, tol])` | 連続する重複頂点を除去 |
 | `STX_Segmentize(geom, max_length)` | 長い辺を分割（頂点追加） |
 

@@ -54,7 +54,7 @@ For testing status and known limitations of each function, see [CHECKLIST.md](CH
 | `STX_Rotate(geom, angle [, center])` | Rotate geometry (origin or specified center) |
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | General 2D affine transformation |
 | `STX_Reverse(geom)` | Reverse vertex order |
-| `STX_Snaptogrid(geom, size [, size_y])` | Snap coordinates to grid |
+| `STX_SnapToGrid(geom, size [, size_y])` | Snap coordinates to grid |
 | `STX_RemoveRepeatedPoints(geom [, tol])` | Remove consecutive duplicate vertices |
 | `STX_Segmentize(geom, max_length)` | Split long segments by adding vertices |
 

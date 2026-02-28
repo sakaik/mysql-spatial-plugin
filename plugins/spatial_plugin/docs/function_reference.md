@@ -58,7 +58,7 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_RelateMatch](#stx_relatematch) | INTEGER | DE-9IM パターン判定 / DE-9IM pattern match |
 | [STX_MakePoint](#stx_makepoint) | GEOMETRY | 座標から POINT 構築 / Create Point from coordinates |
 | [STX_Affine](#stx_affine) | GEOMETRY | アフィン変換 / General 2D affine transformation |
-| [STX_Snaptogrid](#stx_snaptogrid) | GEOMETRY | 座標丸め / Snap coordinates to grid |
+| [STX_SnapToGrid](#stx_snaptogrid) | GEOMETRY | 座標丸め / Snap coordinates to grid |
 | [STX_RemoveRepeatedPoints](#stx_removerepeatedpoints) | GEOMETRY | 重複頂点除去 / Remove consecutive duplicates |
 | [STX_Segmentize](#stx_segmentize) | GEOMETRY | 線分分割 / Split segments to max length |
 | [STX_GeneratePoints](#stx_generatepoints) | GEOMETRY | ランダム点生成 / Random points in polygon |
@@ -1166,14 +1166,14 @@ SELECT ST_AsText(STX_Affine(
 
 ---
 
-### STX_Snaptogrid
+### STX_SnapToGrid
 
 ジオメトリの全座標を指定したグリッドサイズに丸める。
 Snaps all coordinates of a geometry to a grid of the specified size.
 
 ```sql
-STX_Snaptogrid(geometry, size) -> GEOMETRY
-STX_Snaptogrid(geometry, size_x, size_y) -> GEOMETRY
+STX_SnapToGrid(geometry, size) -> GEOMETRY
+STX_SnapToGrid(geometry, size_x, size_y) -> GEOMETRY
 ```
 
 変換式 / Transformation: `x' = round(x / size) * size`
