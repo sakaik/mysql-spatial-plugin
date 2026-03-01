@@ -2583,13 +2583,13 @@ ORDER BY UDF_NAME;
 | STX_CoveredBy                  | integer         |
 | STX_Covers                     | integer         |
 | STX_Dwithin                    | integer         |
-| STX_Generatepoints             | char            |
+| STX_GeneratePoints             | char            |
 | STX_GeomFromEwkt               | char            |
 | STX_Hexgrid                    | char            |
 | STX_Linefromencodedpolyline    | char            |
-| STX_Linelocatepoint            | double          |
-| STX_Linesubstring              | char            |
-| STX_Makepoint                  | char            |
+| STX_LineLocatePoint            | double          |
+| STX_LineSubstring              | char            |
+| STX_MakePoint                  | char            |
 | STX_Minimumboundingcircle      | char            |
 | STX_Perimeter                  | double          |
 | STX_Pointonsurface             | char            |
