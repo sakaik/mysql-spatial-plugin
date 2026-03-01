@@ -2574,19 +2574,19 @@ ORDER BY UDF_NAME;
 +--------------------------------+-----------------+
 | STX_Affine                     | char            |
 | STX_Angle                      | double          |
-| STX_Asencodedpolyline         | char            |
-| STX_Asewkt                     | char            |
-| STX_Askml                      | char            |
-| STX_Assvg                      | char            |
+| STX_AsenCodedPolyline          | char            |
+| STX_AsEwkt                     | char            |
+| STX_AsKml                      | char            |
+| STX_AsSvg                      | char            |
 | STX_Azimuth                    | double          |
-| STX_Closestpoint               | char            |
-| STX_Coveredby                  | integer         |
+| STX_ClosestPoint               | char            |
+| STX_CoveredBy                  | integer         |
 | STX_Covers                     | integer         |
 | STX_Dwithin                    | integer         |
 | STX_Generatepoints             | char            |
-| STX_Geomfromewkt               | char            |
+| STX_GeomFromEwkt               | char            |
 | STX_Hexgrid                    | char            |
-| STX_Linefromencodedpolyline   | char            |
+| STX_Linefromencodedpolyline    | char            |
 | STX_Linelocatepoint            | double          |
 | STX_Linesubstring              | char            |
 | STX_Makepoint                  | char            |
