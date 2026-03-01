@@ -2585,8 +2585,8 @@ ORDER BY UDF_NAME;
 | STX_Dwithin                    | integer         |
 | STX_GeneratePoints             | char            |
 | STX_GeomFromEwkt               | char            |
-| STX_Hexgrid                    | char            |
-| STX_Linefromencodedpolyline    | char            |
+| STX_HexGrid                    | char            |
+| STX_LineFromEncodedPolyline    | char            |
 | STX_LineLocatePoint            | double          |
 | STX_LineSubstring              | char            |
 | STX_MakePoint                  | char            |
@@ -2595,7 +2595,7 @@ ORDER BY UDF_NAME;
 | STX_Pointonsurface             | char            |
 | STX_Project                    | char            |
 | STX_Relate                     | char            |
-| STX_Relatematch                | integer         |
+| STX_RelateMatch                | integer         |
 | STX_Removerepeatedpoints       | char            |
 | STX_Reverse                    | char            |
 | STX_Rotate                     | char            |
