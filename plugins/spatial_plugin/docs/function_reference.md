@@ -2596,13 +2596,13 @@ ORDER BY UDF_NAME;
 | STX_Project                    | char            |
 | STX_Relate                     | char            |
 | STX_RelateMatch                | integer         |
-| STX_Removerepeatedpoints       | char            |
+| STX_RemoveRepeatedPoints       | char            |
 | STX_Reverse                    | char            |
 | STX_Rotate                     | char            |
 | STX_Scale                      | char            |
 | STX_Segmentize                 | char            |
-| STX_Snaptogrid                 | char            |
-| STX_Squaregrid                 | char            |
+| STX_SnapToGrid                 | char            |
+| STX_SquareGrid                 | char            |
 | STX_Translate                  | char            |
 | STX_Translate_latlon           | char            |
 | STX_Makevalid                  | char            |
