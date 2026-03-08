@@ -12,8 +12,8 @@
 | `STX_Dwithin(g1, g2, dist)` | 2つのジオメトリ間の距離が閾値以内か判定 | |
 | `STX_Azimuth(p1, p2)` | p1 から p2 への方位角（ラジアン、北から時計回り） | https://sakaik.hateblo.jp/entry/20260222/STX_Azimuth_func |
 | `STX_Angle(p1, p2, p3)` | p2 における p1-p2-p3 の角度 | https://sakaik.hateblo.jp/entry/20260222/STX_Angle_func |
-| `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す | |
-| `STX_RelateMatch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 | |
+| `STX_Relate(g1, g2)` | DE-9IM 関係行列を返す | https://sakaik.hateblo.jp/entry/20260308/STX_Relate_func |
+| `STX_RelateMatch(g1, g2, pattern)` | DE-9IM パターンマッチ判定 | https://sakaik.hateblo.jp/entry/20260308/STX_RelateMatch_func |
 | `STX_NPoints(geom)` | 全頂点数を返す（全ジオメトリ型対応） |https://sakaik.hateblo.jp/entry/20260219/STX_NPoints_func |
 | `STX_IsRing(linestring)` | LineString がリング（閉環・非自己交差）か判定 | https://sakaik.hateblo.jp/entry/20260220/STX_IsRing_func |
 
@@ -23,7 +23,7 @@
 |---|---|---|
 | `STX_Project(point, dist, azimuth)` | 指定距離・方位角で点を投影 | https://sakaik.hateblo.jp/entry/20260224/STX_Project_func |
 | `STX_LineLocatePoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） | |
-| `STX_LineSubstring(line, start, end)` | ラインの一部を抽出 | |
+| `STX_LineSubstring(line, start, end)` | ラインの一部を抽出 | https://sakaik.hateblo.jp/entry/20260308/STX_LineSubstring_func |
 | `STX_ClosestPoint(point, geom)` | ジオメトリ上の最近接点を返す | |
 | `STX_ShortestLine(g1, g2)` | 2つのジオメトリ間の最短線分を返す | |
 | `STX_PointonSurface(geom)` | ポリゴン内部の点を返す | |
