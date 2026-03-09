@@ -30,7 +30,7 @@ For testing status and known limitations of each function, see [CHECKLIST.md](CH
 | Function | Description |
 |---|---|
 | `STX_Project(point, dist, azimuth)` | Project point by distance and bearing |
-| `STX_LineLocatepoint(line, point)` | Fraction of line length at closest point |
+| `STX_LineLocatePoint(line, point)` | Fraction of line length at closest point |
 | `STX_LineSubstring(line, start, end)` | Extract portion of linestring |
 | `STX_ClosestPoint(point, geom)` | Nearest point on geometry to given point |
 | `STX_ShortestLine(g1, g2)` | Shortest line between two geometries |
