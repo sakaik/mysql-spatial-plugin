@@ -29,8 +29,8 @@
 | `STX_PointonSurface(geom)` | ポリゴン内部の点を返す | https://sakaik.hateblo.jp/entry/20260322/STX_PointOnSurface_func |
 | `STX_Points(geom)` | 全頂点を MultiPoint として抽出 | https://sakaik.hateblo.jp/entry/20260322/STX_Points_func |
 | `STX_MakePoint(x, y [, srid])` | 座標から POINT を構築 | https://sakaik.hateblo.jp/entry/20260219/STX_MakePoint_func |
-| `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 | |
-| `STX_MakePolygon(ring [, inner_rings])` | LineString から Polygon を構築 | |
+| `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 | https://sakaik.hateblo.jp/entry/20260322/STX_MakeLine_func |
+| `STX_MakePolygon(ring [, inner_rings])` | LineString から Polygon を構築 | https://sakaik.hateblo.jp/entry/20260322/STX_MakePolygon_func |
 | `STX_GeneratePoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 | |
 | `STX_MinimumBoundingCircle(geom [, segs])` | 最小外接円（Polygon として返却） | |
 | `STX_SquareGrid(size, geom)` | バウンディングボックスを覆う矩形グリッド | |
