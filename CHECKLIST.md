@@ -25,7 +25,7 @@
 | `STX_LineLocatePoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） | |
 | `STX_LineSubstring(line, start, end)` | ラインの一部を抽出 | https://sakaik.hateblo.jp/entry/20260308/STX_LineSubstring_func |
 | `STX_ClosestPoint(point, geom)` | ジオメトリ上の最近接点を返す | |
-| `STX_ShortestLine(g1, g2)` | 2つのジオメトリ間の最短線分を返す | |
+| `STX_ShortestLine(g1, g2)` | 2つのジオメトリ間の最短線分を返す | https://sakaik.hateblo.jp/entry/20260322/STX_ShortestLine_func |
 | `STX_PointonSurface(geom)` | ポリゴン内部の点を返す | |
 | `STX_Points(geom)` | 全頂点を MultiPoint として抽出 | |
 | `STX_MakePoint(x, y [, srid])` | 座標から POINT を構築 | https://sakaik.hateblo.jp/entry/20260219/STX_MakePoint_func |
