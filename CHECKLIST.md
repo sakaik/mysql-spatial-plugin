@@ -22,7 +22,7 @@
 | 関数 | 説明 | 実行例URL |
 |---|---|---|
 | `STX_Project(point, dist, azimuth)` | 指定距離・方位角で点を投影 | https://sakaik.hateblo.jp/entry/20260224/STX_Project_func |
-| `STX_LineLocatePoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） | |
+| `STX_LineLocatePoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） | https://sakaik.hateblo.jp/entry/20260322/STX_LineLocatePoint_func |
 | `STX_LineSubstring(line, start, end)` | ラインの一部を抽出 | https://sakaik.hateblo.jp/entry/20260308/STX_LineSubstring_func |
 | `STX_ClosestPoint(geom1, geom2)` | geom1上のgeom2に最も近い点を返す | https://sakaik.hateblo.jp/entry/20260322/STX_ClosestPoint_func |
 | `STX_ShortestLine(g1, g2)` | 2つのジオメトリ間の最短線分を返す | https://sakaik.hateblo.jp/entry/20260322/STX_ShortestLine_func |
