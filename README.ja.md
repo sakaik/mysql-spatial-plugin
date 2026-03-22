@@ -32,7 +32,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_Project(point, dist, azimuth)` | 指定距離・方位角で点を投影 |
 | `STX_LineLocatePoint(line, point)` | ライン上の最近接点の位置（0.0〜1.0） |
 | `STX_LineSubstring(line, start, end)` | ラインの一部を抽出 |
-| `STX_ClosestPoint(point, geom)` | ジオメトリ上の最近接点を返す |
+| `STX_ClosestPoint(geom1, geom2)` | geom1上のgeom2に最も近い点を返す |
 | `STX_ShortestLine(g1, g2)` | 2つのジオメトリ間の最短線分を返す |
 | `STX_PointonSurface(geom)` | ポリゴン内部の点を返す |
 | `STX_Points(geom)` | 全頂点を MultiPoint として抽出 |

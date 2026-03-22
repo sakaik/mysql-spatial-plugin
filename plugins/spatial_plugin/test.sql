@@ -674,25 +674,27 @@ CALL assert_eq_text(
 -- stx_closestpoint
 -- =============================================================================
 
+-- Returns the closest point on g1 to g2 (like PostGIS ST_ClosestPoint).
+
 CALL assert_eq_text(
-  'closestpoint: point to linestring',
+  'closestpoint: linestring to point',
   ST_AsText(stx_closestpoint(
-    ST_GeomFromText('POINT(5 5)'),
-    ST_GeomFromText('LINESTRING(0 0, 10 0)'))),
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    ST_GeomFromText('POINT(5 5)'))),
   'POINT(5 0)');
 
 CALL assert_eq_text(
-  'closestpoint: point to polygon boundary',
+  'closestpoint: polygon to point (boundary)',
   ST_AsText(stx_closestpoint(
-    ST_GeomFromText('POINT(15 5)'),
-    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT(15 5)'))),
   'POINT(10 5)');
 
 CALL assert_eq_text(
-  'closestpoint: point inside polygon returns self',
+  'closestpoint: polygon to point (inside)',
   ST_AsText(stx_closestpoint(
-    ST_GeomFromText('POINT(5 5)'),
-    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))),
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT(5 5)'))),
   'POINT(5 5)');
 
 CALL assert_eq_text(
@@ -700,7 +702,14 @@ CALL assert_eq_text(
   ST_AsText(stx_closestpoint(
     ST_GeomFromText('POINT(0 0)'),
     ST_GeomFromText('POINT(3 4)'))),
-  'POINT(3 4)');
+  'POINT(0 0)');
+
+CALL assert_eq_text(
+  'closestpoint: linestring to linestring',
+  ST_AsText(stx_closestpoint(
+    ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+    ST_GeomFromText('LINESTRING(5 5, 5 10)'))),
+  'POINT(5 0)');
 
 CALL assert_eq_text(
   'closestpoint: NULL input returns NULL',

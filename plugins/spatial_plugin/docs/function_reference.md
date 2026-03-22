@@ -878,49 +878,56 @@ SELECT STX_Coveredby(
 
 ### STX_ClosestPoint
 
-第1引数の点から、第2引数のジオメトリ上で最も近い点を返す。
-Returns the closest point on geometry2 to the given point (geometry1).
+第1引数のジオメトリ上で、第2引数のジオメトリに最も近い点を返す。PostGIS の `ST_ClosestPoint(g1, g2)` と同じ動作。
+Returns the closest point on geometry1 to geometry2. Equivalent to PostGIS `ST_ClosestPoint(g1, g2)`.
 
 ```sql
-STX_ClosestPoint(point, geometry) -> GEOMETRY (Point)
+STX_ClosestPoint(geometry1, geometry2) -> GEOMETRY (Point)
 ```
 
 #### 引数 (Arguments)
 
 | 引数 (Arg) | 型 (Type) | 説明 (Description) |
 |---|---|---|
-| point | POINT | 基準点 / Reference point (must be Point type) |
-| geometry | GEOMETRY | 対象ジオメトリ / Target geometry |
+| geometry1 | GEOMETRY | 最近接点を求めるジオメトリ / Geometry on which to find the closest point |
+| geometry2 | GEOMETRY | 対象ジオメトリ / Reference geometry |
 
 #### 戻り値 (Return Value)
 
-第2引数のジオメトリ上（または内部）で最も近い Point。点がポリゴン内部にある場合は入力点そのものを返す。
-The closest Point on (or inside) geometry2. If the point is inside a polygon, returns the point itself.
+geometry1 上の geometry2 に最も近い Point。`STX_ShortestLine(g1, g2)` の始点と等価。
+The closest Point on geometry1 to geometry2. Equivalent to the start point of `STX_ShortestLine(g1, g2)`.
 
-#### 対応するジオメトリ型 (Supported Types for geometry2)
+#### 対応するジオメトリ型 (Supported Geometry Types)
 
-Point, LineString, Polygon, MultiPolygon
+両引数とも任意のジオメトリ型（Point, LineString, Polygon, MultiPolygon 等）を指定可能。
+Both arguments accept any geometry type (Point, LineString, Polygon, MultiPolygon, etc.).
 
 #### 使用例 (Examples)
 
 ```sql
--- 点からラインへの最近接点 / Closest point on line
-SELECT ST_AsText(STX_Closestpoint(
-  ST_GeomFromText('POINT(5 5)'),
-  ST_GeomFromText('LINESTRING(0 0, 10 0)')));
+-- ライン上の点に最も近い点 / Closest point on line to a point
+SELECT ST_AsText(STX_ClosestPoint(
+  ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+  ST_GeomFromText('POINT(5 5)')));
 -- POINT(5 0)
 
--- 点からポリゴン境界への最近接点 / Closest point on polygon boundary
-SELECT ST_AsText(STX_Closestpoint(
-  ST_GeomFromText('POINT(15 5)'),
-  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- ポリゴン境界上の最近接点 / Closest point on polygon boundary
+SELECT ST_AsText(STX_ClosestPoint(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+  ST_GeomFromText('POINT(15 5)')));
 -- POINT(10 5)
 
--- 点がポリゴン内部 → 自身を返す / Point inside polygon -> returns self
-SELECT ST_AsText(STX_Closestpoint(
-  ST_GeomFromText('POINT(5 5)'),
-  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
+-- 点がポリゴン内部 → その点自身を返す / Point inside polygon -> returns that point
+SELECT ST_AsText(STX_ClosestPoint(
+  ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+  ST_GeomFromText('POINT(5 5)')));
 -- POINT(5 5)
+
+-- ライン同士の最近接点 / Closest point between two linestrings
+SELECT ST_AsText(STX_ClosestPoint(
+  ST_GeomFromText('LINESTRING(0 0, 10 0)'),
+  ST_GeomFromText('LINESTRING(5 5, 5 10)')));
+-- POINT(5 0)
 ```
 
 #### 対応する他の関数 (Equivalent in Other Systems)
@@ -2836,8 +2843,8 @@ SELECT ST_Length(STX_Shortestline(
 
 #### 備考 (Notes)
 
-- 既存の `STX_ClosestPoint` は一方のジオメトリ上の最近接**点**を返すが、`STX_ShortestLine` は両方のジオメトリ上の最近接点を結ぶ**線分**を返す。
-  `STX_ClosestPoint` returns the nearest **point** on one geometry, while `STX_ShortestLine` returns the **line segment** connecting the nearest points on both geometries.
+- `STX_ClosestPoint(g1, g2)` は g1 上の最近接**点**（= ShortestLine の始点）を返すが、`STX_ShortestLine` は両方のジオメトリ上の最近接点を結ぶ**線分**を返す。
+  `STX_ClosestPoint(g1, g2)` returns the nearest **point** on g1 (= start point of ShortestLine), while `STX_ShortestLine` returns the **line segment** connecting the nearest points on both geometries.
 
 ---
 

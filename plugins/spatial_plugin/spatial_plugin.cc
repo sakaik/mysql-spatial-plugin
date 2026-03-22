@@ -1293,108 +1293,7 @@ static char *stx_pointonsurface(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
 static void stx_pointonsurface_deinit(UDF_INIT *) {}
 
-}  // extern "C" (pause for closestpoint/relate templates)
-
-// ----- stx_closestpoint helpers (outside extern "C") -------------------------
-// Finds closest point on geometry2 to a reference point using segment projection.
-
-template <typename PointT>
-static PointT closest_point_on_segment(const PointT &p, const PointT &a,
-                                        const PointT &b) {
-  double ax = bg::get<0>(a), ay = bg::get<1>(a);
-  double bx = bg::get<0>(b), by = bg::get<1>(b);
-  double px = bg::get<0>(p), py = bg::get<1>(p);
-  double dx = bx - ax, dy = by - ay;
-  double len_sq = dx * dx + dy * dy;
-  double t = (len_sq > 0.0) ? ((px - ax) * dx + (py - ay) * dy) / len_sq : 0.0;
-  t = std::max(0.0, std::min(1.0, t));
-  PointT result;
-  bg::set<0>(result, ax + t * dx);
-  bg::set<1>(result, ay + t * dy);
-  return result;
-}
-
-template <typename PointT, typename LinestringT>
-static PointT closest_point_on_linestring(const PointT &p,
-                                           const LinestringT &ls) {
-  PointT best;
-  double best_dist_sq = std::numeric_limits<double>::max();
-  for (size_t i = 0; i + 1 < ls.size(); ++i) {
-    PointT cp = closest_point_on_segment(p, ls[i], ls[i + 1]);
-    double dx = bg::get<0>(cp) - bg::get<0>(p);
-    double dy = bg::get<1>(cp) - bg::get<1>(p);
-    double d2 = dx * dx + dy * dy;
-    if (d2 < best_dist_sq) { best_dist_sq = d2; best = cp; }
-  }
-  return best;
-}
-
-template <typename PointT, typename RingT>
-static PointT closest_point_on_ring(const PointT &p, const RingT &ring) {
-  PointT best;
-  double best_dist_sq = std::numeric_limits<double>::max();
-  for (size_t i = 0; i + 1 < ring.size(); ++i) {
-    PointT cp = closest_point_on_segment(p, ring[i], ring[i + 1]);
-    double dx = bg::get<0>(cp) - bg::get<0>(p);
-    double dy = bg::get<1>(cp) - bg::get<1>(p);
-    double d2 = dx * dx + dy * dy;
-    if (d2 < best_dist_sq) { best_dist_sq = d2; best = cp; }
-  }
-  return best;
-}
-
-template <typename PointT, typename PolygonT>
-static PointT closest_point_on_polygon(const PointT &p,
-                                        const PolygonT &poly) {
-  // If point is inside polygon, closest point is the point itself
-  if (bg::within(p, poly) || bg::covered_by(p, poly)) return p;
-  // Otherwise find closest point on boundary
-  PointT best = closest_point_on_ring<PointT>(p, poly.outer());
-  double best_dist_sq = [&]() {
-    double dx = bg::get<0>(best) - bg::get<0>(p);
-    double dy = bg::get<1>(best) - bg::get<1>(p);
-    return dx * dx + dy * dy;
-  }();
-  for (const auto &inner : poly.inners()) {
-    PointT cp = closest_point_on_ring<PointT>(p, inner);
-    double dx = bg::get<0>(cp) - bg::get<0>(p);
-    double dy = bg::get<1>(cp) - bg::get<1>(p);
-    double d2 = dx * dx + dy * dy;
-    if (d2 < best_dist_sq) { best_dist_sq = d2; best = cp; }
-  }
-  return best;
-}
-
-// Dispatches closest-point-on-g2 for a known source point type.
-template <typename PointT, typename Variant>
-static std::optional<PointT> closest_point_dispatch(const PointT &p,
-                                                     const Variant &g2) {
-  using LS = std::conditional_t<std::is_same_v<PointT, Point>, Linestring,
-                                 GeoLinestring>;
-  using Poly = std::conditional_t<std::is_same_v<PointT, Point>, Polygon,
-                                   GeoPolygon>;
-  using MPoly = std::conditional_t<std::is_same_v<PointT, Point>, MultiPolygon,
-                                    GeoMultiPolygon>;
-
-  if (auto *pt2 = std::get_if<PointT>(&g2)) return *pt2;
-  if (auto *ls = std::get_if<LS>(&g2))
-    return closest_point_on_linestring(p, *ls);
-  if (auto *poly = std::get_if<Poly>(&g2))
-    return closest_point_on_polygon(p, *poly);
-  if (auto *mpoly = std::get_if<MPoly>(&g2)) {
-    PointT best;
-    double best_d2 = std::numeric_limits<double>::max();
-    for (const auto &poly : *mpoly) {
-      PointT cp = closest_point_on_polygon(p, poly);
-      double dx = bg::get<0>(cp) - bg::get<0>(p);
-      double dy = bg::get<1>(cp) - bg::get<1>(p);
-      double d2 = dx * dx + dy * dy;
-      if (d2 < best_d2) { best_d2 = d2; best = cp; }
-    }
-    return best;
-  }
-  return std::nullopt;
-}
+}  // extern "C" (pause for relate templates)
 
 // ----- stx_relate helpers (outside extern "C") -------------------------------
 // Build DE-9IM using basic boost predicates (intersects, within, covered_by,
@@ -1507,9 +1406,11 @@ static std::string relate_geographic(const GeographicVariant &v1,
   return "FFFFFFFFF";
 }
 
-extern "C" {  // resume extern "C" for closestpoint/relate UDFs
+extern "C" {  // resume extern "C" for closestpoint/relate/etc UDFs
 
 // ----- stx_closestpoint ------------------------------------------------------
+// Returns the closest point on g1 to g2 (matches PostGIS ST_ClosestPoint).
+// Uses GEOS GEOSNearestPoints() — index 0 is the point on g1.
 
 static bool stx_closestpoint_init(UDF_INIT *initid, UDF_ARGS *args,
                                    char *msg) {
@@ -1520,46 +1421,38 @@ static bool stx_closestpoint_init(UDF_INIT *initid, UDF_ARGS *args,
   args->arg_type[0] = STRING_RESULT;
   args->arg_type[1] = STRING_RESULT;
   initid->maybe_null = 1;
-  initid->max_length = 25;
+  initid->ptr = nullptr;
   return false;
 }
 
 static char *stx_closestpoint(UDF_INIT *initid, UDF_ARGS *args, char *result,
                                unsigned long *length, char *is_null,
                                char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
   if (!args->args[0] || !args->args[1]) { *is_null = 1; return nullptr; }
-  auto two = parse_two_geoms(args);
-  if (!two) { *error = 1; return nullptr; }
 
-  std::string wkb;
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
 
-  if (auto *c1 = std::get_if<CartesianVariant>(&two->r1.geometry)) {
-    auto *c2 = std::get_if<CartesianVariant>(&two->r2.geometry);
-    if (!c2) { *error = 1; return nullptr; }
-    auto *pt1 = std::get_if<Point>(c1);
-    if (!pt1) { *error = 1; return nullptr; }  // g1 must be Point
-    auto cp = closest_point_dispatch<Point, CartesianVariant>(*pt1, *c2);
-    if (!cp) { *error = 1; return nullptr; }
-    wkb = write_point(two->r2.srid, *cp);
-  } else if (auto *g1 = std::get_if<GeographicVariant>(&two->r1.geometry)) {
-    auto *g2 = std::get_if<GeographicVariant>(&two->r2.geometry);
-    if (!g2) { *error = 1; return nullptr; }
-    auto *pt1 = std::get_if<GeoPoint>(g1);
-    if (!pt1) { *error = 1; return nullptr; }  // g1 must be Point
-    auto cp = closest_point_dispatch<GeoPoint, GeographicVariant>(*pt1, *g2);
-    if (!cp) { *error = 1; return nullptr; }
-    wkb = write_point(two->r2.srid, *cp);
-  } else {
-    *error = 1;
-    return nullptr;
-  }
+  auto geom1 = mysql_to_geos(args->args[0], args->lengths[0]);
+  auto geom2 = mysql_to_geos(args->args[1], args->lengths[1]);
+  if (!geom1 || !geom2) { *error = 1; return nullptr; }
 
-  *length = static_cast<unsigned long>(wkb.size());
-  std::memcpy(result, wkb.data(), wkb.size());
-  return result;
+  auto ctx = get_geos_context();
+  GEOSCoordSequence *cs = GEOSNearestPoints_r(ctx, geom1.get(), geom2.get());
+  if (!cs) { *error = 1; return nullptr; }
+
+  double x, y;
+  GEOSCoordSeq_getX_r(ctx, cs, 0, &x);
+  GEOSCoordSeq_getY_r(ctx, cs, 0, &y);
+  GEOSCoordSeq_destroy_r(ctx, cs);
+
+  auto wkb = write_point_wkb(srid, x, y);
+  return return_wkb(initid, wkb, result, length);
 }
 
-static void stx_closestpoint_deinit(UDF_INIT *) {}
+static void stx_closestpoint_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
 
 // ----- stx_relate ------------------------------------------------------------
 // Returns DE-9IM matrix string.
