@@ -1148,58 +1148,6 @@ static void stx_reverse_deinit(UDF_INIT *initid) {
 
 }  // extern "C" (pause for template helpers)
 
-// ----- stx_pointonsurface helpers (outside extern "C" for templates) ---------
-
-// Compute coordinate-average centroid (works for both Cartesian and Geographic).
-template <typename PointT, typename PolygonT>
-static PointT coord_avg_centroid(const PolygonT &poly) {
-  const auto &outer = poly.outer();
-  double sx = 0, sy = 0;
-  // Exclude last point if it duplicates the first (closed ring).
-  size_t n = outer.size();
-  if (n > 1 && bg::get<0>(outer[0]) == bg::get<0>(outer[n - 1]) &&
-      bg::get<1>(outer[0]) == bg::get<1>(outer[n - 1]))
-    --n;
-  if (n == 0) { PointT p; bg::set<0>(p, 0); bg::set<1>(p, 0); return p; }
-  for (size_t i = 0; i < n; ++i) {
-    sx += bg::get<0>(outer[i]);
-    sy += bg::get<1>(outer[i]);
-  }
-  PointT c;
-  bg::set<0>(c, sx / n);
-  bg::set<1>(c, sy / n);
-  return c;
-}
-
-// Helper: find a point guaranteed to be inside the polygon.
-template <typename PointT, typename PolygonT>
-static PointT point_on_surface_impl(const PolygonT &poly) {
-  PointT centroid = coord_avg_centroid<PointT, PolygonT>(poly);
-  if (bg::within(centroid, poly)) return centroid;
-
-  // Fallback: scan along y = centroid.y across polygon exterior ring
-  double cy = bg::get<1>(centroid);
-  const auto &outer = poly.outer();
-  std::vector<double> xs;
-  for (size_t i = 0; i + 1 < outer.size(); ++i) {
-    double y0 = bg::get<1>(outer[i]);
-    double y1 = bg::get<1>(outer[i + 1]);
-    if ((y0 <= cy && cy < y1) || (y1 <= cy && cy < y0)) {
-      double x0 = bg::get<0>(outer[i]);
-      double x1 = bg::get<0>(outer[i + 1]);
-      double t = (cy - y0) / (y1 - y0);
-      xs.push_back(x0 + t * (x1 - x0));
-    }
-  }
-  std::sort(xs.begin(), xs.end());
-  if (xs.size() >= 2) {
-    PointT p;
-    bg::set<0>(p, (xs[0] + xs[1]) / 2.0);
-    bg::set<1>(p, cy);
-    return p;
-  }
-  return centroid;
-}
 
 // DE-9IM pattern matching helper (outside extern "C" since it's C++ only).
 static bool de9im_match(const std::string &matrix, const char *pattern,
@@ -1223,75 +1171,50 @@ static bool de9im_match(const std::string &matrix, const char *pattern,
 extern "C" {  // resume extern "C" for UDF functions
 
 // ----- stx_pointonsurface ----------------------------------------------------
+// Returns a point guaranteed to lie on the surface of the geometry.
+// Uses GEOS GEOSPointOnSurface() — works with any geometry type.
 
 static bool stx_pointonsurface_init(UDF_INIT *initid, UDF_ARGS *args,
                                      char *msg) {
   if (args->arg_count != 1) {
-    strcpy(msg, "stx_pointonsurface() requires 1 argument (polygon)");
+    strcpy(msg, "stx_pointonsurface() requires 1 argument");
     return true;
   }
   args->arg_type[0] = STRING_RESULT;
   initid->maybe_null = 1;
-  initid->max_length = 25;
+  initid->ptr = nullptr;
   return false;
 }
 
 static char *stx_pointonsurface(UDF_INIT *initid, UDF_ARGS *args, char *result,
                                  unsigned long *length, char *is_null,
                                  char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
   if (!args->args[0]) { *is_null = 1; return nullptr; }
-  auto r = parse_geometry(args->args[0], args->lengths[0]);
-  if (!r) { *error = 1; return nullptr; }
 
-  std::string wkb;
+  uint32_t srid = extract_srid(args->args[0], args->lengths[0]);
 
-  if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
-    if (auto *poly = std::get_if<Polygon>(cv)) {
-      auto pt = point_on_surface_impl<Point, Polygon>(*poly);
-      wkb = write_point(r->srid, pt);
-    } else if (auto *mpoly = std::get_if<MultiPolygon>(cv)) {
-      if (mpoly->empty()) { *error = 1; return nullptr; }
-      const Polygon *largest = &(*mpoly)[0];
-      double max_area = std::abs(bg::area(*largest));
-      for (size_t i = 1; i < mpoly->size(); ++i) {
-        double a = std::abs(bg::area((*mpoly)[i]));
-        if (a > max_area) { max_area = a; largest = &(*mpoly)[i]; }
-      }
-      auto pt = point_on_surface_impl<Point, Polygon>(*largest);
-      wkb = write_point(r->srid, pt);
-    } else {
-      *error = 1;
-      return nullptr;
-    }
-  } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
-    if (auto *poly = std::get_if<GeoPolygon>(gv)) {
-      auto pt = point_on_surface_impl<GeoPoint, GeoPolygon>(*poly);
-      wkb = write_point(r->srid, pt);
-    } else if (auto *mpoly = std::get_if<GeoMultiPolygon>(gv)) {
-      if (mpoly->empty()) { *error = 1; return nullptr; }
-      const GeoPolygon *largest = &(*mpoly)[0];
-      double max_area = std::abs(bg::area(*largest));
-      for (size_t i = 1; i < mpoly->size(); ++i) {
-        double a = std::abs(bg::area((*mpoly)[i]));
-        if (a > max_area) { max_area = a; largest = &(*mpoly)[i]; }
-      }
-      auto pt = point_on_surface_impl<GeoPoint, GeoPolygon>(*largest);
-      wkb = write_point(r->srid, pt);
-    } else {
-      *error = 1;
-      return nullptr;
-    }
-  } else {
-    *error = 1;
-    return nullptr;
-  }
+  auto geom = mysql_to_geos(args->args[0], args->lengths[0]);
+  if (!geom) { *error = 1; return nullptr; }
 
-  *length = static_cast<unsigned long>(wkb.size());
-  std::memcpy(result, wkb.data(), wkb.size());
-  return result;
+  auto ctx = get_geos_context();
+  GEOSGeomPtr pt(GEOSPointOnSurface_r(ctx, geom.get()));
+  if (!pt) { *error = 1; return nullptr; }
+
+  const GEOSCoordSequence *cs = GEOSGeom_getCoordSeq_r(ctx, pt.get());
+  if (!cs) { *error = 1; return nullptr; }
+
+  double x, y;
+  GEOSCoordSeq_getX_r(ctx, cs, 0, &x);
+  GEOSCoordSeq_getY_r(ctx, cs, 0, &y);
+
+  auto wkb = write_point_wkb(srid, x, y);
+  return return_wkb(initid, wkb, result, length);
 }
 
-static void stx_pointonsurface_deinit(UDF_INIT *) {}
+static void stx_pointonsurface_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
 
 }  // extern "C" (pause for relate templates)
 

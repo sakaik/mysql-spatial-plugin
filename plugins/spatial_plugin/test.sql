@@ -666,6 +666,21 @@ CALL assert_eq_int(
   1);
 
 CALL assert_eq_text(
+  'pointonsurface: point returns self',
+  ST_AsText(stx_pointonsurface(ST_GeomFromText('POINT(5 5)'))),
+  'POINT(5 5)');
+
+CALL assert_eq_text(
+  'pointonsurface: linestring returns point on line',
+  ST_AsText(stx_pointonsurface(ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'))),
+  'POINT(10 0)');
+
+CALL assert_eq_text(
+  'pointonsurface: multipoint returns a point',
+  ST_AsText(stx_pointonsurface(ST_GeomFromText('MULTIPOINT(0 0, 10 0, 5 5)'))),
+  'POINT(5 5)');
+
+CALL assert_eq_text(
   'pointonsurface: NULL input returns NULL',
   ST_AsText(stx_pointonsurface(NULL)),
   NULL);

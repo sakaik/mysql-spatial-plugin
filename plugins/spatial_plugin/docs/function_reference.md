@@ -825,8 +825,8 @@ SELECT ST_AsText(STX_Reverse(
 
 ### STX_PointonSurface
 
-ポリゴン（またはマルチポリゴン）の内部に位置することが保証された点を返す。
-Returns a point guaranteed to lie in the interior of a polygon (or multipolygon).
+ジオメトリの表面上（または内部）に位置することが保証された点を返す。あらゆるジオメトリ型に対応。
+Returns a point guaranteed to lie on the surface of the geometry. Works with any geometry type.
 
 ```sql
 STX_PointonSurface(geometry) -> GEOMETRY (Point)
@@ -836,38 +836,36 @@ STX_PointonSurface(geometry) -> GEOMETRY (Point)
 
 | 引数 (Arg) | 型 (Type) | 説明 (Description) |
 |---|---|---|
-| geometry | GEOMETRY | Polygon または MultiPolygon / Polygon or MultiPolygon |
+| geometry | GEOMETRY | 任意のジオメトリ / Any geometry type |
 
 #### 戻り値 (Return Value)
 
-ポリゴン内部にある Point ジオメトリ（入力と同じ SRID）。凹型ポリゴンでも内部に位置する点を返す。MultiPolygon の場合は最大面積のポリゴンを使用。
-A Point inside the polygon (same SRID as input). Returns an interior point even for concave polygons. For MultiPolygon, uses the largest polygon by area.
-
-#### アルゴリズム (Algorithm)
-
-1. ポリゴン頂点の座標平均（重心近似）を計算
-2. 重心がポリゴン内部にあればそれを返す
-3. 重心が外部の場合（凹型等）、重心のY座標での水平線スキャンで内部点を探索
+入力ジオメトリの表面上にある Point（入力と同じ SRID）。Polygon の場合は内部に位置する点、LineString の場合はライン上の点、Point の場合はそのPoint自身を返す。
+A Point on the surface of the input geometry (same SRID as input). For Polygon returns an interior point, for LineString a point on the line, for Point returns itself.
 
 #### 使用例 (Examples)
 
 ```sql
--- 正方形の重心 / Centroid of a square
-SELECT ST_AsText(STX_Pointonsurface(
+-- 正方形の内部点 / Interior point of a square
+SELECT ST_AsText(STX_PointonSurface(
   ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
 -- POINT(5 5)
 
--- L字型凹ポリゴン（重心は外部だが、内部点を返す）
--- L-shaped concave polygon (centroid is outside, but returns interior point)
-SELECT ST_AsText(STX_Pointonsurface(
+-- L字型凹ポリゴン（内部点を返す）
+-- L-shaped concave polygon (returns interior point)
+SELECT ST_AsText(STX_PointonSurface(
   ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))')));
--- POINT(2.5 5)
+-- POINT(2.5 2.5)
 
--- 結果は必ずポリゴン内部にある / Result is always inside the polygon
-SELECT STX_Coveredby(
-  STX_Pointonsurface(ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))')),
-  ST_GeomFromText('POLYGON((0 0, 10 0, 10 5, 5 5, 5 10, 0 10, 0 0))'));
--- 1
+-- ライン上の点 / Point on a linestring
+SELECT ST_AsText(STX_PointonSurface(
+  ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)')));
+-- POINT(10 0)
+
+-- Point はそのまま返る / Point returns itself
+SELECT ST_AsText(STX_PointonSurface(
+  ST_GeomFromText('POINT(5 5)')));
+-- POINT(5 5)
 ```
 
 #### 対応する他の関数 (Equivalent in Other Systems)
