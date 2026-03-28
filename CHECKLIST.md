@@ -34,7 +34,7 @@
 | [`STX_GeneratePoints(geom, n [, seed])`](plugins/spatial_plugin/docs/function_reference.md#stx_generatepoints) | ポリゴン内のランダム点を生成 | https://sakaik.hateblo.jp/entry/20260322/STX_GeneratePoints_func |
 | [`STX_MinimumBoundingCircle(geom [, segs])`](plugins/spatial_plugin/docs/function_reference.md#stx_minimumboundingcircle) | 最小外接円（Polygon として返却） | https://sakaik.hateblo.jp/entry/20260328/STX_MinimumBoundingCircle_func |
 | [`STX_SquareGrid(size, geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_squaregrid) | バウンディングボックスを覆う矩形グリッド | https://sakaik.hateblo.jp/entry/20260328/STX_SquareGrid_func |
-| [`STX_Hexgrid(size, geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_hexgrid) | バウンディングボックスを覆う六角形グリッド | |
+| [`STX_Hexgrid(size, geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_hexgrid) | バウンディングボックスを覆う六角形グリッド | https://sakaik.hateblo.jp/entry/20260328/STX_HexGrid_func |
 
 ## 座標変換
 
