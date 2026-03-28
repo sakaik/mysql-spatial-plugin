@@ -2167,16 +2167,25 @@ static std::vector<PolygonT> make_hex_grid(double size, double minx,
   double dx = 1.5 * size;                // column spacing
   double dy = size * std::sqrt(3.0);     // row spacing
 
-  int col_start = static_cast<int>(std::floor(minx / dx)) - 1;
-  int col_end = static_cast<int>(std::ceil(maxx / dx)) + 1;
+  // Build bbox polygon for precise intersection filtering
+  PolygonT bbox;
+  PointT bp;
+  bg::set<0>(bp, minx); bg::set<1>(bp, miny); bbox.outer().push_back(bp);
+  bg::set<0>(bp, maxx); bg::set<1>(bp, miny); bbox.outer().push_back(bp);
+  bg::set<0>(bp, maxx); bg::set<1>(bp, maxy); bbox.outer().push_back(bp);
+  bg::set<0>(bp, minx); bg::set<1>(bp, maxy); bbox.outer().push_back(bp);
+  bg::set<0>(bp, minx); bg::set<1>(bp, miny); bbox.outer().push_back(bp);
+
+  int col_start = static_cast<int>(std::floor(minx / dx));
+  int col_end = static_cast<int>(std::ceil(maxx / dx));
 
   for (int col = col_start; col <= col_end; ++col) {
     double cx = col * dx;
     if (cx + size < minx || cx - size > maxx) continue;
 
     double y_off = (std::abs(col) % 2 == 1) ? dy / 2.0 : 0.0;
-    int row_start = static_cast<int>(std::floor((miny - y_off) / dy)) - 1;
-    int row_end = static_cast<int>(std::ceil((maxy - y_off) / dy)) + 1;
+    int row_start = static_cast<int>(std::floor((miny - y_off) / dy));
+    int row_end = static_cast<int>(std::ceil((maxy - y_off) / dy));
 
     for (int row = row_start; row <= row_end; ++row) {
       double cy = row * dy + y_off;
@@ -2192,6 +2201,7 @@ static std::vector<PolygonT> make_hex_grid(double size, double minx,
         bg::set<1>(pt, cy + size * std::sin(angle));
         poly.outer().push_back(pt);
       }
+      if (!bg::intersects(poly, bbox)) continue;
       cells.push_back(std::move(poly));
     }
   }

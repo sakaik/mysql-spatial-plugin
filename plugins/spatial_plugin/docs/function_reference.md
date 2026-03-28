@@ -1719,6 +1719,7 @@ A GeometryCollection of square Polygons covering the input's bounding box. Grid 
 
 #### 備考 (Notes)
 
+- グリッドは入力ジオメトリのバウンディングボックス（外接矩形）を基準に生成される。凹形状のジオメトリでは、ジオメトリ自体と交差しないがバウンディングボックスとは交差するセルも含まれる / Grid cells are generated based on the bounding box of the input geometry. For concave geometries, cells that intersect the bounding box but not the geometry itself may be included
 - 安全上の上限として最大 1,000,000 セルまで生成 / Maximum 1,000,000 cells for safety
 - Cartesian / Geographic 両対応（座標空間で動作） / Works in both Cartesian and Geographic coordinate space
 
@@ -1774,6 +1775,7 @@ A GeometryCollection of hexagonal Polygons covering the input's bounding box. Us
 
 #### 備考 (Notes)
 
+- グリッドは入力ジオメトリのバウンディングボックス（外接矩形）を基準に生成される。凹形状のジオメトリでは、ジオメトリ自体と交差しないがバウンディングボックスとは交差するセルも含まれる / Grid cells are generated based on the bounding box of the input geometry. For concave geometries, cells that intersect the bounding box but not the geometry itself may be included
 - 六角形はフラットトップ型（横幅 = 2×size、高さ = √3×size） / Hexagons are flat-top (width = 2×size, height = √3×size)
 - 列間隔 = 1.5 × size、行間隔 = √3 × size / Column spacing = 1.5 × size, row spacing = √3 × size
 - 安全上の上限として最大 1,000,000 セルまで生成 / Maximum 1,000,000 cells for safety
