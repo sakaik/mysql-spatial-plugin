@@ -47,7 +47,7 @@
 | [`STX_Affine(geom, a, b, d, e, xoff, yoff)`](plugins/spatial_plugin/docs/function_reference.md#stx_affine) | 一般2Dアフィン変換 | |
 | [`STX_Reverse(geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_reverse) | 頂点の順序を反転 | https://sakaik.hateblo.jp/entry/20260221/STX_Reverse_func |
 | [`STX_SnapToGrid(geom, size [, size_y])`](plugins/spatial_plugin/docs/function_reference.md#stx_snaptogrid) | 座標をグリッドにスナップ | |
-| [`STX_RemoveRepeatedPoints(geom [, tol])`](plugins/spatial_plugin/docs/function_reference.md#stx_removerepeatedpoints) | 連続する重複頂点を除去 | |
+| [`STX_RemoveRepeatedPoints(geom [, tol])`](plugins/spatial_plugin/docs/function_reference.md#stx_removerepeatedpoints) | 連続する重複頂点を除去 | https://sakaik.hateblo.jp/entry/20260329/STX_RemoveRepeatedPoints_func |
 | [`STX_Segmentize(geom, max_length)`](plugins/spatial_plugin/docs/function_reference.md#stx_segmentize) | 長い辺を分割（頂点追加） | |
 
 ## GEOS ベース関数
