@@ -1235,9 +1235,11 @@ STX_RemoveRepeatedPoints(geometry, tolerance) -> GEOMETRY
 
 #### 備考 (Notes)
 
-- 1引数版: 完全一致の連続重複のみ除去 / 1-argument form: removes exact consecutive duplicates only
-- 2引数版: tolerance 以内の連続頂点を除去 / 2-argument form: removes consecutive vertices within tolerance
-- LineString は最低2点、Polygon のリングは最低4点を保持 / LineString keeps minimum 2 points, Polygon rings keep minimum 4 points
+- 1引数版: 完全一致の重複を除去 / 1-argument form: removes exact duplicates
+- 2引数版: tolerance 以内の近接頂点を除去 / 2-argument form: removes vertices within tolerance distance
+- LineString は連続する重複を除去、最低2点を保持 / LineString removes consecutive duplicates, keeps minimum 2 points
+- Polygon のリングは連続する重複を除去、最低4点を保持 / Polygon rings remove consecutive duplicates, keep minimum 4 points
+- MultiPoint は順序に関係なく重複を除去（集合として扱う） / MultiPoint removes duplicates regardless of order (treated as a set)
 
 #### 使用例 (Examples)
 
@@ -1251,6 +1253,11 @@ SELECT ST_AsText(STX_Removerepeatedpoints(
 SELECT ST_AsText(STX_Removerepeatedpoints(
   ST_GeomFromText('LINESTRING(0 0, 0.1 0, 1 0, 1.05 0, 2 0)'), 0.2));
 -- LINESTRING(0 0,1 0,2 0)
+
+-- MultiPoint の重複除去 / Remove duplicates from MultiPoint
+SELECT ST_AsText(STX_Removerepeatedpoints(
+  ST_GeomFromText('MULTIPOINT((1 1),(2 2),(3 3),(2 2))')));
+-- MULTIPOINT((1 1),(2 2),(3 3))
 ```
 
 #### 対応する他の関数 (Equivalent in Other Systems)

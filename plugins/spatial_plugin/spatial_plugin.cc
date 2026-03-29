@@ -1680,7 +1680,26 @@ static void remove_repeated_variant(Variant &v, double tol2) {
               remove_repeated_with_tolerance(ring, tol2, 4);
           }
         }
-        // Point/MultiPoint: no repeated points to remove
+        // MultiPoint: remove duplicate points (unordered, so any duplicate)
+        else if constexpr (std::is_same_v<T, MultiPoint> ||
+                            std::is_same_v<T, GeoMultiPoint>) {
+          using PtType = typename T::value_type;
+          T out;
+          for (size_t i = 0; i < g.size(); ++i) {
+            bool dup = false;
+            for (size_t j = 0; j < out.size(); ++j) {
+              double dx = bg::get<0>(g[i]) - bg::get<0>(out[j]);
+              double dy = bg::get<1>(g[i]) - bg::get<1>(out[j]);
+              if (dx * dx + dy * dy <= tol2) {
+                dup = true;
+                break;
+              }
+            }
+            if (!dup) out.push_back(g[i]);
+          }
+          if (!out.empty()) g = std::move(out);
+        }
+        // Point: single point, nothing to remove
       },
       v);
 }
@@ -1775,12 +1794,14 @@ static char *stx_removerepeatedpoints(UDF_INIT *initid, UDF_ARGS *args,
 
   std::string wkb;
   if (tolerance <= 0.0) {
-    // Exact duplicate removal: use bg::unique
+    // Exact duplicate removal: use bg::unique, plus set-based dedup for MultiPoint
     if (auto *cv = std::get_if<CartesianVariant>(&r->geometry)) {
       std::visit([](auto &g) { bg::unique(g); }, *cv);
+      remove_repeated_variant(*cv, 0.0);
       wkb = write_geometry(r->srid, *cv);
     } else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry)) {
       std::visit([](auto &g) { bg::unique(g); }, *gv);
+      remove_repeated_variant(*gv, 0.0);
       wkb = write_geometry(r->srid, *gv);
     }
   } else {

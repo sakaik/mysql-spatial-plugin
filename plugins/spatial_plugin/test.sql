@@ -1035,6 +1035,21 @@ CALL assert_eq_text(
   ST_AsText(stx_removerepeatedpoints(NULL)),
   NULL);
 
+CALL assert_eq_text(
+  'removerepeatedpoints: multipoint exact duplicates',
+  ST_AsText(stx_removerepeatedpoints(ST_GeomFromText('MULTIPOINT((1 1),(2 2),(3 3),(2 2))'))),
+  'MULTIPOINT((1 1),(2 2),(3 3))');
+
+CALL assert_eq_text(
+  'removerepeatedpoints: multipoint tolerance',
+  ST_AsText(stx_removerepeatedpoints(ST_GeomFromText('MULTIPOINT((0 0),(0.05 0.05),(1 1),(1.1 1.1),(5 5))'), 0.2)),
+  'MULTIPOINT((0 0),(1 1),(5 5))');
+
+CALL assert_eq_text(
+  'removerepeatedpoints: multipoint all same',
+  ST_AsText(stx_removerepeatedpoints(ST_GeomFromText('MULTIPOINT((1 1),(1 1),(1 1))'))),
+  'MULTIPOINT((1 1))');
+
 -- =============================================================================
 -- stx_segmentize
 -- =============================================================================
