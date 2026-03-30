@@ -37,12 +37,12 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_PointonSurface(geom)` | ポリゴン内部の点を返す |
 | `STX_Points(geom)` | 全頂点を MultiPoint として抽出 |
 | `STX_MakePoint(coord1, coord2 [, srid])` | 座標から POINT を構築（軸順序は SRS 定義に従う） |
-| `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Point群から LineString を構築 |
+| `STX_MakeLine(p1, p2)` / `STX_MakeLine(multipoint)` | Point群から LineString を構築 |
 | `STX_MakePolygon(ring [, inner_rings])` | LineString から Polygon を構築 |
 | `STX_GeneratePoints(geom, n [, seed])` | ポリゴン内のランダム点を生成 |
 | `STX_MinimumBoundingCircle(geom [, segs])` | 最小外接円（Polygon として返却） |
 | `STX_SquareGrid(size, geom)` | バウンディングボックスを覆う矩形グリッド |
-| `STX_Hexgrid(size, geom)` | バウンディングボックスを覆う六角形グリッド |
+| `STX_HexGrid(size, geom)` | バウンディングボックスを覆う六角形グリッド |
 
 ### 座標変換
 

@@ -2619,7 +2619,7 @@ ORDER BY UDF_NAME;
 | STX_SquareGrid                 | char            |
 | STX_Translate                  | char            |
 | STX_Translate_latlon           | char            |
-| STX_Makevalid                  | char            |
+| STX_MakeValid                  | char            |
 | STX_Linemerge                  | char            |
 | STX_Voronoi                    | char            |
 | STX_Delaunay                   | char            |
@@ -2639,11 +2639,11 @@ ORDER BY UDF_NAME;
 | STX_Simplifypolygonhull        | char            |
 | STX_Concavehullofpolygons      | char            |
 | STX_Npoints                    | integer         |
-| STX_Makeline                   | char            |
-| STX_Makepolygon                | char            |
+| STX_MakeLine                   | char            |
+| STX_MakePolygon                | char            |
 | STX_Points                     | char            |
 | STX_Isring                     | integer         |
-| STX_Shortestline               | char            |
+| STX_ShortestLine               | char            |
 | STX_dms2deg                    | double          |
 | STX_deg2dms_deg                | integer         |
 | STX_deg2dms_min                | integer         |

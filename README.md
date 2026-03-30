@@ -37,12 +37,12 @@ For testing status and known limitations of each function, see [CHECKLIST.md](CH
 | `STX_PointonSurface(geom)` | Interior point of polygon |
 | `STX_Points(geom)` | Extract all vertices as MultiPoint |
 | `STX_MakePoint(coord1, coord2 [, srid])` | Create a point from coordinates (axis order follows SRS definition) |
-| `STX_Makeline(p1, p2)` / `STX_Makeline(multipoint)` | Create LineString from points |
+| `STX_MakeLine(p1, p2)` / `STX_MakeLine(multipoint)` | Create LineString from points |
 | `STX_MakePolygon(ring [, inner_rings])` | Create Polygon from LineString |
 | `STX_GeneratePoints(geom, n [, seed])` | Generate random points inside polygon |
 | `STX_MinimumBoundingCircle(geom [, segs])` | Minimum bounding circle as polygon |
 | `STX_SquareGrid(size, geom)` | Square grid covering bounding box |
-| `STX_Hexgrid(size, geom)` | Hexagonal grid covering bounding box |
+| `STX_HexGrid(size, geom)` | Hexagonal grid covering bounding box |
 
 ### Coordinate Transformations
 

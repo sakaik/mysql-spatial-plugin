@@ -29,12 +29,12 @@
 | [`STX_PointonSurface(geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_pointonsurface) | ポリゴン内部の点を返す | https://sakaik.hateblo.jp/entry/20260322/STX_PointOnSurface_func |
 | [`STX_Points(geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_points) | 全頂点を MultiPoint として抽出 | https://sakaik.hateblo.jp/entry/20260322/STX_Points_func |
 | [`STX_MakePoint(x, y [, srid])`](plugins/spatial_plugin/docs/function_reference.md#stx_makepoint) | 座標から POINT を構築 | https://sakaik.hateblo.jp/entry/20260219/STX_MakePoint_func |
-| [`STX_Makeline(p1, p2)`](plugins/spatial_plugin/docs/function_reference.md#stx_makeline) / `STX_Makeline(multipoint)` | Point群から LineString を構築 | https://sakaik.hateblo.jp/entry/20260322/STX_MakeLine_func |
+| [`STX_MakeLine(p1, p2)`](plugins/spatial_plugin/docs/function_reference.md#stx_makeline) / `STX_MakeLine(multipoint)` | Point群から LineString を構築 | https://sakaik.hateblo.jp/entry/20260322/STX_MakeLine_func |
 | [`STX_MakePolygon(ring [, inner_rings])`](plugins/spatial_plugin/docs/function_reference.md#stx_makepolygon) | LineString から Polygon を構築 | https://sakaik.hateblo.jp/entry/20260322/STX_MakePolygon_func |
 | [`STX_GeneratePoints(geom, n [, seed])`](plugins/spatial_plugin/docs/function_reference.md#stx_generatepoints) | ポリゴン内のランダム点を生成 | https://sakaik.hateblo.jp/entry/20260322/STX_GeneratePoints_func |
 | [`STX_MinimumBoundingCircle(geom [, segs])`](plugins/spatial_plugin/docs/function_reference.md#stx_minimumboundingcircle) | 最小外接円（Polygon として返却） | https://sakaik.hateblo.jp/entry/20260328/STX_MinimumBoundingCircle_func |
 | [`STX_SquareGrid(size, geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_squaregrid) | バウンディングボックスを覆う矩形グリッド | https://sakaik.hateblo.jp/entry/20260328/STX_SquareGrid_func |
-| [`STX_Hexgrid(size, geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_hexgrid) | バウンディングボックスを覆う六角形グリッド | https://sakaik.hateblo.jp/entry/20260328/STX_HexGrid_func |
+| [`STX_HexGrid(size, geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_hexgrid) | バウンディングボックスを覆う六角形グリッド | https://sakaik.hateblo.jp/entry/20260328/STX_HexGrid_func |
 
 ## 座標変換
 
