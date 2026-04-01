@@ -70,7 +70,7 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_GeomFromEwkt](#stx_geomfromewkt) | GEOMETRY | EWKT 入力 / EWKT to Geometry |
 | [STX_MinimumBoundingCircle](#stx_minimumboundingcircle) | GEOMETRY | 最小外接円 / Minimum bounding circle |
 | [STX_SquareGrid](#stx_squaregrid) | GEOMETRY | 矩形グリッド生成 / Square grid generation |
-| [STX_Hexgrid](#stx_hexgrid) | GEOMETRY | 六角形グリッド生成 / Hexagonal grid generation |
+| [STX_HexGrid](#stx_hexgrid) | GEOMETRY | 六角形グリッド生成 / Hexagonal grid generation |
 | [STX_MakeValid](#stx_makevalid) | GEOMETRY | 不正ジオメトリ修復 / Repair invalid geometry (GEOS) |
 | [STX_LineMerge](#stx_linemerge) | GEOMETRY | ライン結合 / Merge connected LineStrings (GEOS) |
 | [STX_Voronoi](#stx_voronoi) | GEOMETRY | ボロノイ図 / Voronoi diagram (GEOS) |
@@ -1759,13 +1759,13 @@ SELECT ST_NumGeometries(STX_Squaregrid(0.01,
 
 ---
 
-### STX_Hexgrid
+### STX_HexGrid
 
 入力ジオメトリのバウンディングボックスを覆する六角形（フラットトップ）グリッドを GeometryCollection として返す。
 Returns a GeometryCollection of flat-top hexagonal grid cells covering the bounding box of the input geometry.
 
 ```sql
-STX_Hexgrid(size, geometry) -> GEOMETRY (GeometryCollection)
+STX_HexGrid(size, geometry) -> GEOMETRY (GeometryCollection)
 ```
 
 #### 引数 (Arguments)
@@ -1791,16 +1791,16 @@ A GeometryCollection of hexagonal Polygons covering the input's bounding box. Us
 
 ```sql
 -- 20x20 の領域を辺長 5 の六角形で覆う / Cover 20x20 area with hexagons of edge length 5
-SELECT ST_NumGeometries(STX_Hexgrid(5,
+SELECT ST_NumGeometries(STX_HexGrid(5,
   ST_GeomFromText('POLYGON((0 0, 20 0, 20 20, 0 20, 0 0))')));
 
 -- 各セルは 7 点（6 頂点 + 閉合点）/ Each cell has 7 ring points (6 vertices + closing)
-SELECT ST_NumPoints(ST_ExteriorRing(ST_GeometryN(STX_Hexgrid(5,
+SELECT ST_NumPoints(ST_ExteriorRing(ST_GeometryN(STX_HexGrid(5,
   ST_GeomFromText('POLYGON((0 0, 20 0, 20 20, 0 20, 0 0))')), 1)));
 -- 7
 
 -- 結果は GEOMETRYCOLLECTION 型 / Result is a GEOMETRYCOLLECTION
-SELECT ST_GeometryType(STX_Hexgrid(5,
+SELECT ST_GeometryType(STX_HexGrid(5,
   ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')));
 -- GEOMCOLLECTION
 ```
