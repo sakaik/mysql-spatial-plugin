@@ -135,10 +135,19 @@ Download and extract them from [MySQL Downloads](https://dev.mysql.com/downloads
 
 Both directories should be placed at the repository root (siblings of `plugins/`).
 
-## Pre-built Binary
+## Pre-built Binaries
 
-A pre-built `spatial_plugin.so` is included for **MySQL 9.6.x on Linux (x86_64)**.
-The binary is tied to the MySQL version it was compiled against and cannot be used with other versions.
+Two pre-built binaries are included for **MySQL 9.6.x on Linux (x86_64)**:
+
+| File | Build Environment | Required glibc | Target Platforms |
+|---|---|---|---|
+| `spatial_plugin.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38+ | Ubuntu 24.04, Debian 13+, Fedora 39+ |
+| `spatial_plugin-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32+ | OL9, RHEL 9, AlmaLinux 9, Rocky Linux 9, Ubuntu 22.04+ |
+
+Choose the binary matching your system's glibc version. Check with `ldd --version`.
+When using `spatial_plugin-glibc-2.34.so`, rename (or symlink) it to `spatial_plugin.so` before placing it in the MySQL plugin directory.
+
+The binaries are tied to the MySQL version they were compiled against and cannot be used with other versions.
 To use a different MySQL version, rebuild from source (see below).
 
 ## Build

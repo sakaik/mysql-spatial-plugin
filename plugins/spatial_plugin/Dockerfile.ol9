@@ -1,0 +1,5 @@
+FROM oraclelinux:9
+
+RUN dnf install -y gcc gcc-c++ cmake make && dnf clean all
+
+WORKDIR /build

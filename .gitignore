@@ -14,6 +14,7 @@ local.mk
 
 # Build artifacts
 *.o
+# spatial_plugin-glibc-*.so is tracked (not ignored)
 
 # Claude Code config
 .claude/

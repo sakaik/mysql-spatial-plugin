@@ -137,8 +137,17 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 ## ビルド済みバイナリ
 
-**MySQL 9.6.x（Linux x86_64）** 用のビルド済み `spatial_plugin.so` が同梱されています。
-このバイナリはコンパイル時の MySQL バージョンに紐づいており、他のバージョンでは使用できません。
+**MySQL 9.6.x（Linux x86_64）** 用のビルド済みバイナリが2種類同梱されています：
+
+| ファイル | ビルド環境 | 必要な glibc | 対象プラットフォーム |
+|---|---|---|---|
+| `spatial_plugin.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38 以上 | Ubuntu 24.04、Debian 13 以降、Fedora 39 以降 |
+| `spatial_plugin-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32 以上 | OL9、RHEL 9、AlmaLinux 9、Rocky Linux 9、Ubuntu 22.04 以降 |
+
+ご使用のシステムの glibc バージョンに合ったバイナリを選択してください。`ldd --version` で確認できます。
+`spatial_plugin-glibc-2.34.so` を使用する場合は、MySQL プラグインディレクトリに配置する前に `spatial_plugin.so` にリネーム（またはシンボリックリンク作成）してください。
+
+これらのバイナリはコンパイル時の MySQL バージョンに紐づいており、他のバージョンでは使用できません。
 異なるバージョンの MySQL で使用する場合は、ソースからリビルドしてください。
 
 ## ビルド

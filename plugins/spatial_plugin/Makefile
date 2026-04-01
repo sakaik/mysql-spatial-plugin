@@ -64,3 +64,9 @@ test:
 
 clean:
 	rm -f $(TARGET)
+
+# --- Docker cross-build ---
+.PHONY: docker-build-ol9
+
+docker-build-ol9:
+	./docker-build-ol9.sh
