@@ -91,7 +91,7 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_SimplifyPolygonHull](#stx_simplifypolygonhull) | GEOMETRY | ポリゴン Hull 簡略化 / Polygon hull simplification (GEOS) |
 | [STX_ConcaveHullOfPolygons](#stx_concavehullofpolygons) | GEOMETRY | ポリゴン集合の凹包 / Concave hull of polygon set (GEOS) |
 | [STX_NPoints](#stx_npoints) | INTEGER | 全頂点数 / Total number of vertices |
-| [STX_Makeline](#stx_makeline) | GEOMETRY | LineString 構築 / Create LineString from points |
+| [STX_MakeLine](#stx_makeline) | GEOMETRY | LineString 構築 / Create LineString from points |
 | [STX_MakePolygon](#stx_makepolygon) | GEOMETRY | Polygon 構築 / Create Polygon from LineString |
 | [STX_Points](#stx_points) | GEOMETRY | 全頂点抽出 / Extract all vertices as MultiPoint |
 | [STX_IsRing](#stx_isring) | INTEGER | 閉環判定 / Test if LineString is a ring (GEOS) |
@@ -2681,14 +2681,14 @@ SELECT STX_Npoints(ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0),(2 2,4 2,4
 
 ---
 
-### STX_Makeline
+### STX_MakeLine
 
 2つの Point から、または MultiPoint から LineString を構築する。
 Creates a LineString from two Points, or from a MultiPoint.
 
 ```sql
-STX_Makeline(point1, point2) -> GEOMETRY (LineString)
-STX_Makeline(multipoint)     -> GEOMETRY (LineString)
+STX_MakeLine(point1, point2) -> GEOMETRY (LineString)
+STX_MakeLine(multipoint)     -> GEOMETRY (LineString)
 ```
 
 #### 引数 (Arguments)
@@ -2701,12 +2701,12 @@ STX_Makeline(multipoint)     -> GEOMETRY (LineString)
 #### 使用例 (Examples)
 
 ```sql
-SELECT ST_AsText(STX_Makeline(
+SELECT ST_AsText(STX_MakeLine(
   ST_GeomFromText('POINT(0 0)'),
   ST_GeomFromText('POINT(1 1)')));
 -- LINESTRING(0 0,1 1)
 
-SELECT ST_AsText(STX_Makeline(
+SELECT ST_AsText(STX_MakeLine(
   ST_GeomFromText('MULTIPOINT((0 0),(1 1),(2 2))')));
 -- LINESTRING(0 0,1 1,2 2)
 ```
@@ -2738,11 +2738,11 @@ STX_MakePolygon(outer_ring, inner_rings)   -> GEOMETRY (Polygon)
 #### 使用例 (Examples)
 
 ```sql
-SELECT ST_AsText(STX_Makepolygon(
+SELECT ST_AsText(STX_MakePolygon(
   ST_GeomFromText('LINESTRING(0 0,10 0,10 10,0 10,0 0)')));
 -- POLYGON((0 0,0 10,10 10,10 0,0 0))
 
-SELECT ST_AsText(STX_Makepolygon(
+SELECT ST_AsText(STX_MakePolygon(
   ST_GeomFromText('LINESTRING(0 0,10 0,10 10,0 10,0 0)'),
   ST_GeomFromText('MULTILINESTRING((2 2,4 2,4 4,2 4,2 2))')));
 -- POLYGON((0 0,0 10,10 10,10 0,0 0),(2 2,4 2,4 4,2 4,2 2))
