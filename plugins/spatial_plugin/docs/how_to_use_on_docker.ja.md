@@ -1,0 +1,90 @@
+# Docker 上での STX Spatial Plugin の利用方法
+
+## 概要
+
+本プラグインを簡易的に MySQL 9.6 のDockerで動作させる手順を紹介します。
+
+## 前提条件
+
+- Docker がインストール済みであり実行可能な状態になっていること
+
+
+## 手順
+## MySQL dockerプラグイン動作環境用意
+### 作業フォルダの作成
+mkdir -p ~/work/mysqlplugin
+cd !$
+
+### docker-composeファイルの作成
+- docker-compose.yaml
+```
+services:
+    db:
+      image: mysql:9.6
+      environment:
+          MYSQL_ROOT_PASSWORD: mypass
+          MYSQL_DATABASE: mydb
+      ports:
+        - "3306:3306"
+      volumes:
+        - db_data:/var/lib/mysql
+        - ./spatial_plugin-glibc-2.34.so:/usr/lib64/mysql/plugin/spatial_plugin.so
+
+volumes:
+   db_data:
+```
+
+### pluginを取得
+```
+wget https://github.com/sakaik/mysql-spatial-plugin/releases/download/v0.2.0/spatial_plugin-glibc-2.34.so
+```
+
+### dockerでMySQLサーバを起動
+```
+docker compose up
+```
+
+
+### MySQLサーバにmysqlクライアントを使って接続（サーバは立ち上がりっぱなしなので別の窓を開けて作業）
+```
+docker compose exec db mysql -u root -pmypass mydb
+```
+
+※パスワードの扱いは docker-compose.yamlの記述とあわせ、よしなに変更してください
+いま
+.
+- 接続時の例
+```
+	$ docker compose exec db mysql -u root -pmypass
+	mysql: [Warning] Using a password on the command line interface can be insecure.
+	Welcome to the MySQL monitor.  Commands end with ; or \g.
+	Your MySQL connection id is 9
+	Server version: 9.6.0 MySQL Community Server - GPL
+
+	Copyright (c) 2000, 2026, Oracle and/or its affiliates.
+
+	Oracle is a registered trademark of Oracle Corporation and/or its
+	affiliates. Other names may be trademarks of their respective
+	owners.
+
+	Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+
+### プラグインのインストール
+```
+INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
+```
+
+
+### 動作確認の例
+```
+mysql> SELECT STX_Perimeter(ST_GeomFromText('POLYGON((35 135, 35 136, 36 136, 36 135, 35 135))', 6668)) pm;
++--------------------+
+| pm                 |
++--------------------+
+| 403352.30562388065 |
++--------------------+
+1 row in set (0.049 sec)
+```
+
+これで60個以上の追加Spatial関数をMySQLで使うことができます。「バグ報告ドリブン開発(BRDD)」ですので、おかしな挙動があったらぜひ報告をお願いします。
