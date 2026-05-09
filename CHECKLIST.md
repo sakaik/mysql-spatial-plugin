@@ -46,9 +46,9 @@
 | [`STX_Rotate(geom, angle [, center])`](plugins/spatial_plugin/docs/function_reference.md#stx_rotate) | ジオメトリを回転（原点または指定中心） | https://sakaik.hateblo.jp/entry/20260221/STX_Rotate_func |
 | [`STX_Affine(geom, a, b, d, e, xoff, yoff)`](plugins/spatial_plugin/docs/function_reference.md#stx_affine) | 一般2Dアフィン変換 | https://sakaik.hateblo.jp/entry/20260509/STX_Affine |
 | [`STX_Reverse(geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_reverse) | 頂点の順序を反転 | https://sakaik.hateblo.jp/entry/20260221/STX_Reverse_func |
-| [`STX_SnapToGrid(geom, size [, size_y])`](plugins/spatial_plugin/docs/function_reference.md#stx_snaptogrid) | 座標をグリッドにスナップ | |
+| [`STX_SnapToGrid(geom, size [, size_y])`](plugins/spatial_plugin/docs/function_reference.md#stx_snaptogrid) | 座標をグリッドにスナップ | https://sakaik.hateblo.jp/entry/20260509/STX_SnapToGrid |
 | [`STX_RemoveRepeatedPoints(geom [, tol])`](plugins/spatial_plugin/docs/function_reference.md#stx_removerepeatedpoints) | 連続する重複頂点を除去 | https://sakaik.hateblo.jp/entry/20260329/STX_RemoveRepeatedPoints_func |
-| [`STX_Segmentize(geom, max_length)`](plugins/spatial_plugin/docs/function_reference.md#stx_segmentize) | 長い辺を分割（頂点追加） | |
+| [`STX_Segmentize(geom, max_length)`](plugins/spatial_plugin/docs/function_reference.md#stx_segmentize) | 長い辺を分割（頂点追加） | https://sakaik.hateblo.jp/entry/20260509/STX_Segmentize |
 
 ## GEOS ベース関数
 
