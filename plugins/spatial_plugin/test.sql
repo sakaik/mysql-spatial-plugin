@@ -1216,7 +1216,7 @@ CALL assert_eq_text(
 CALL assert_eq_text(
   'assvg: linestring absolute',
   stx_assvg(ST_GeomFromText('LINESTRING(0 0, 10 10, 20 0)')),
-  'M 0 -0 L 10 -10 L 20 -0');
+  'M 0 0 L 10 -10 L 20 0');
 
 -- LineString relative (rel=1)
 CALL assert_eq_text(
@@ -1228,7 +1228,7 @@ CALL assert_eq_text(
 CALL assert_eq_text(
   'assvg: polygon',
   stx_assvg(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))')),
-  'M 0 -0 L 0 -10 L 10 -10 L 10 -0 L 0 -0 Z');
+  'M 0 0 L 0 -10 L 10 -10 L 10 0 L 0 0 Z');
 
 -- Custom precision
 CALL assert_eq_text(

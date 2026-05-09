@@ -2507,8 +2507,11 @@ static LinestringT decode_polyline(const char *encoded, size_t len,
 
 static void svg_append_coord(std::string &buf, double x, double y, int prec) {
   char bx[64], by[64];
+  if (x == 0.0) x = 0.0;
+  double ny = -y;
+  if (ny == 0.0) ny = 0.0;
   snprintf(bx, sizeof(bx), "%.*g", prec, x);
-  snprintf(by, sizeof(by), "%.*g", prec, -y);
+  snprintf(by, sizeof(by), "%.*g", prec, ny);
   buf += bx;
   buf += ' ';
   buf += by;
@@ -2517,8 +2520,12 @@ static void svg_append_coord(std::string &buf, double x, double y, int prec) {
 template <typename PointT>
 static std::string svg_point(const PointT &pt, int prec) {
   char bx[64], by[64];
-  snprintf(bx, sizeof(bx), "%.*g", prec, bg::get<0>(pt));
-  snprintf(by, sizeof(by), "%.*g", prec, -bg::get<1>(pt));
+  double px = bg::get<0>(pt);
+  double py = -bg::get<1>(pt);
+  if (px == 0.0) px = 0.0;
+  if (py == 0.0) py = 0.0;
+  snprintf(bx, sizeof(bx), "%.*g", prec, px);
+  snprintf(by, sizeof(by), "%.*g", prec, py);
   std::string s = "cx=\"";
   s += bx;
   s += "\" cy=\"";

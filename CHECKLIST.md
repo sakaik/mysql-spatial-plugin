@@ -80,7 +80,7 @@
 |---|---|---|
 | [`STX_AsEncodedPolyline(geom [, prec])`](plugins/spatial_plugin/docs/function_reference.md#stx_asencodedpolyline) | Google Encoded Polyline に変換 | https://sakaik.hateblo.jp/entry/20260222/STX_LineFromEncodedPolyline_STX_AsEncodedPolyline_func |
 | [`STX_LineFromEncodedPolyline(text [, srid [, prec]])`](plugins/spatial_plugin/docs/function_reference.md#stx_linefromencodedpolyline) | Encoded Polyline から LineString を構築 | https://sakaik.hateblo.jp/entry/20260222/STX_LineFromEncodedPolyline_STX_AsEncodedPolyline_func |
-| [`STX_AsSvg(geom [, rel [, prec]])`](plugins/spatial_plugin/docs/function_reference.md#stx_assvg) | SVG パスデータに変換 | |
+| [`STX_AsSvg(geom [, rel [, prec]])`](plugins/spatial_plugin/docs/function_reference.md#stx_assvg) | SVG パスデータに変換 | https://sakaik.hateblo.jp/entry/20260509/STX_AsSvg |
 | [`STX_AsKml(geom [, prec])`](plugins/spatial_plugin/docs/function_reference.md#stx_askml) | KML に変換 | |
 | [`STX_AsEwkt(geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_asewkt) | EWKT（Extended WKT）に変換 | |
 | [`STX_GeomFromEwkt(text)`](plugins/spatial_plugin/docs/function_reference.md#stx_geomfromewkt) | EWKT からジオメトリを構築 | |
