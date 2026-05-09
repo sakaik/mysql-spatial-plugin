@@ -44,7 +44,7 @@
 | [`STX_Translate_latlon(geom, dlat, dlon)`](plugins/spatial_plugin/docs/function_reference.md#stx_translate_latlon) | 緯度経度順で平行移動（Geographic専用）(独自実装) | https://sakaik.hateblo.jp/entry/20260220/STX_Translate_func |
 | [`STX_Scale(geom, sx, sy [, center])`](plugins/spatial_plugin/docs/function_reference.md#stx_scale) | ジオメトリを拡大・縮小（基準点指定可） | https://sakaik.hateblo.jp/entry/20260509/STX_Scale |
 | [`STX_Rotate(geom, angle [, center])`](plugins/spatial_plugin/docs/function_reference.md#stx_rotate) | ジオメトリを回転（原点または指定中心） | https://sakaik.hateblo.jp/entry/20260221/STX_Rotate_func |
-| [`STX_Affine(geom, a, b, d, e, xoff, yoff)`](plugins/spatial_plugin/docs/function_reference.md#stx_affine) | 一般2Dアフィン変換 | |
+| [`STX_Affine(geom, a, b, d, e, xoff, yoff)`](plugins/spatial_plugin/docs/function_reference.md#stx_affine) | 一般2Dアフィン変換 | https://sakaik.hateblo.jp/entry/20260509/STX_Affine |
 | [`STX_Reverse(geom)`](plugins/spatial_plugin/docs/function_reference.md#stx_reverse) | 頂点の順序を反転 | https://sakaik.hateblo.jp/entry/20260221/STX_Reverse_func |
 | [`STX_SnapToGrid(geom, size [, size_y])`](plugins/spatial_plugin/docs/function_reference.md#stx_snaptogrid) | 座標をグリッドにスナップ | |
 | [`STX_RemoveRepeatedPoints(geom [, tol])`](plugins/spatial_plugin/docs/function_reference.md#stx_removerepeatedpoints) | 連続する重複頂点を除去 | https://sakaik.hateblo.jp/entry/20260329/STX_RemoveRepeatedPoints_func |
