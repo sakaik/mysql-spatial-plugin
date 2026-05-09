@@ -984,16 +984,25 @@ static void stx_translate_latlon_deinit(UDF_INIT *initid) {
 }
 
 // ----- stx_scale -------------------------------------------------------------
-// Scales a geometry by (sx, sy) relative to origin.
+// Scales a geometry by (sx, sy).
+// 3 args: (geometry, sx, sy) — scale relative to origin
+// 4 args: (geometry, sx, sy, center_point) — scale relative to POINT geometry
+// 5 args: (geometry, sx, sy, cx, cy) — scale relative to point (cx, cy)
 
 static bool stx_scale_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
-  if (args->arg_count != 3) {
-    strcpy(msg, "stx_scale() requires 3 arguments (geometry, sx, sy)");
+  if (args->arg_count < 3 || args->arg_count > 5) {
+    strcpy(msg, "stx_scale() requires 3-5 arguments (geometry, sx, sy[, center_point | cx, cy])");
     return true;
   }
   args->arg_type[0] = STRING_RESULT;
   args->arg_type[1] = REAL_RESULT;
   args->arg_type[2] = REAL_RESULT;
+  if (args->arg_count == 4) {
+    args->arg_type[3] = STRING_RESULT;  // POINT geometry
+  } else if (args->arg_count == 5) {
+    args->arg_type[3] = REAL_RESULT;
+    args->arg_type[4] = REAL_RESULT;
+  }
   initid->maybe_null = 1;
   initid->ptr = nullptr;
   return false;
@@ -1010,11 +1019,38 @@ static char *stx_scale(UDF_INIT *initid, UDF_ARGS *args, char *result,
   if (!r) { *error = 1; return nullptr; }
   double sx = *reinterpret_cast<double *>(args->args[1]);
   double sy = *reinterpret_cast<double *>(args->args[2]);
+  double cx = 0.0, cy = 0.0;
 
-  auto wkb = transform_and_write(*r, [sx, sy](double &x, double &y) {
-    x *= sx;
-    y *= sy;
-  });
+  if (args->arg_count == 4) {
+    if (!args->args[3]) { *is_null = 1; return nullptr; }
+    auto cp = parse_geometry(args->args[3], args->lengths[3]);
+    if (!cp) { *error = 1; return nullptr; }
+    if (cp->srid != r->srid) {
+      *error = 1;
+      return nullptr;
+    }
+    if (auto *cv = std::get_if<CartesianVariant>(&cp->geometry)) {
+      auto *pt = std::get_if<Point>(cv);
+      if (!pt) { *error = 1; return nullptr; }
+      cx = bg::get<0>(*pt);
+      cy = bg::get<1>(*pt);
+    } else if (auto *gv = std::get_if<GeographicVariant>(&cp->geometry)) {
+      auto *pt = std::get_if<GeoPoint>(gv);
+      if (!pt) { *error = 1; return nullptr; }
+      cx = bg::get<0>(*pt);
+      cy = bg::get<1>(*pt);
+    }
+  } else if (args->arg_count == 5) {
+    if (!args->args[3] || !args->args[4]) { *is_null = 1; return nullptr; }
+    cx = *reinterpret_cast<double *>(args->args[3]);
+    cy = *reinterpret_cast<double *>(args->args[4]);
+  }
+
+  auto wkb =
+      transform_and_write(*r, [sx, sy, cx, cy](double &x, double &y) {
+        x = cx + (x - cx) * sx;
+        y = cy + (y - cy) * sy;
+      });
   if (wkb.empty()) { *error = 1; return nullptr; }
   return return_wkb(initid, wkb, result, length);
 }

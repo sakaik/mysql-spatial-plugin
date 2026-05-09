@@ -50,7 +50,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 |---|---|
 | `STX_Translate(geom, dx, dy)` | ジオメトリを平行移動 |
 | `STX_Translate_latlon(geom, dlat, dlon)` | 緯度経度順で平行移動（Geographic専用）（独自実装） |
-| `STX_Scale(geom, sx, sy)` | ジオメトリを拡大・縮小 |
+| `STX_Scale(geom, sx, sy [, center])` | ジオメトリを拡大・縮小（基準点指定可） |
 | `STX_Rotate(geom, angle [, center])` | ジオメトリを回転（原点または指定中心） |
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | 一般2Dアフィン変換 |
 | `STX_Reverse(geom)` | 頂点の順序を反転 |

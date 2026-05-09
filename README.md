@@ -50,7 +50,7 @@ For testing status and known limitations of each function, see [CHECKLIST.md](CH
 |---|---|
 | `STX_Translate(geom, dx, dy)` | Shift geometry by offset |
 | `STX_Translate_latlon(geom, dlat, dlon)` | Shift by lat/lon offsets (Geographic only) (original) |
-| `STX_Scale(geom, sx, sy)` | Scale geometry by factors |
+| `STX_Scale(geom, sx, sy [, center])` | Scale geometry by factors (origin or specified center) |
 | `STX_Rotate(geom, angle [, center])` | Rotate geometry (origin or specified center) |
 | `STX_Affine(geom, a, b, d, e, xoff, yoff)` | General 2D affine transformation |
 | `STX_Reverse(geom)` | Reverse vertex order |

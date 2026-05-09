@@ -590,6 +590,28 @@ CALL assert_eq_text(
   ST_AsText(stx_scale(NULL, 2, 2)),
   NULL);
 
+CALL assert_eq_text(
+  'scale: point (2,4) by (2,2) around center POINT(1,1)',
+  ST_AsText(stx_scale(ST_GeomFromText('POINT(2 4)'), 2, 2, ST_GeomFromText('POINT(1 1)'))),
+  'POINT(3 7)');
+
+CALL assert_eq_text(
+  'scale: point (2,4) by (2,2) around center coords (1,1)',
+  ST_AsText(stx_scale(ST_GeomFromText('POINT(2 4)'), 2, 2, 1, 1)),
+  'POINT(3 7)');
+
+CALL assert_eq_text(
+  'scale: polygon by (2,2) around center (5,5)',
+  ST_AsText(stx_scale(
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'), 2, 2,
+    ST_GeomFromText('POINT(5 5)'))),
+  'POLYGON((-5 -5,-5 15,15 15,15 -5,-5 -5))');
+
+CALL assert_eq_text(
+  'scale: center NULL returns NULL',
+  ST_AsText(stx_scale(ST_GeomFromText('POINT(1 1)'), 2, 2, NULL)),
+  NULL);
+
 -- =============================================================================
 -- stx_rotate
 -- =============================================================================

@@ -49,8 +49,8 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_Angle](#stx_angle) | DOUBLE | 3点がなす角度 / Angle formed by three points |
 | [STX_Translate](#stx_translate) | GEOMETRY | 平行移動 / Translates a geometry by dx, dy |
 | [STX_Translate_latlon](#stx_translate_latlon) | GEOMETRY | 緯度経度順で平行移動（Geographic専用） / Translates by delta_lat, delta_lon (Geographic only) |
-| [STX_Scale](#stx_scale) | GEOMETRY | スケール変換 / Scales a geometry by sx, sy |
-| [STX_Rotate](#stx_rotate) | GEOMETRY | 回転 / Rotates a geometry by angle |
+| [STX_Scale](#stx_scale) | GEOMETRY | スケール変換（基準点指定可） / Scales a geometry by sx, sy around origin or specified center |
+| [STX_Rotate](#stx_rotate) | GEOMETRY | 回転（中心指定可） / Rotates a geometry by angle around origin or specified center |
 | [STX_Reverse](#stx_reverse) | GEOMETRY | 頂点順逆転 / Reverses vertex order |
 | [STX_PointonSurface](#stx_pointonsurface) | GEOMETRY | 内部保証点 / Guaranteed interior point |
 | [STX_ClosestPoint](#stx_closestpoint) | GEOMETRY | 最近接点 / Closest point on geometry |
@@ -692,11 +692,13 @@ SELECT ST_AsText(STX_Translate_latlon(
 
 ### STX_Scale
 
-ジオメトリを原点を基準に (sx, sy) でスケール変換する。
-Scales a geometry by sx, sy factors relative to the origin.
+ジオメトリを (sx, sy) でスケール変換する。基準点を指定しない場合は原点 (0, 0) を基準にスケールする。
+Scales a geometry by sx, sy factors. If no center is specified, scales relative to the origin (0, 0).
 
 ```sql
 STX_Scale(geometry, sx, sy) -> GEOMETRY
+STX_Scale(geometry, sx, sy, center_point) -> GEOMETRY
+STX_Scale(geometry, sx, sy, cx, cy) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -706,30 +708,47 @@ STX_Scale(geometry, sx, sy) -> GEOMETRY
 | geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
 | sx | DOUBLE | X 方向のスケール係数 / X scale factor |
 | sy | DOUBLE | Y 方向のスケール係数 / Y scale factor |
+| center_point | GEOMETRY (POINT) | スケール基準のPOINTジオメトリ（省略時は原点） / Center of scaling as a POINT geometry (default: origin) |
+| cx, cy | DOUBLE, DOUBLE | スケール基準の座標（省略時は原点） / Center of scaling coordinates (default: origin) |
 
 #### 戻り値 (Return Value)
 
 スケール変換後のジオメトリ（入力と同じ型・SRID）。全ジオメトリ型に対応。
 The scaled geometry (same type and SRID as input). All geometry types are supported.
 
+4引数形式で `center_point` のSRIDが入力ジオメトリと異なる場合はエラーとなる。
+In the 4-argument form, an error is returned if the SRID of `center_point` differs from the input geometry.
+
 #### 使用例 (Examples)
 
 ```sql
--- 点の拡大 / Scale a point
+-- 点の拡大（原点基準） / Scale a point relative to origin
 SELECT ST_AsText(STX_Scale(
   ST_GeomFromText('POINT(3 4)'), 2, 3));
 -- POINT(6 12)
 
--- ラインの縮小 / Shrink a linestring
+-- ラインの縮小（原点基準） / Shrink a linestring relative to origin
 SELECT ST_AsText(STX_Scale(
   ST_GeomFromText('LINESTRING(0 0, 10 0, 10 10)'), 0.5, 0.5));
 -- LINESTRING(0 0,5 0,5 5)
+
+-- (1,1) を中心に2倍拡大 / Scale 2x around (1,1)
+SELECT ST_AsText(STX_Scale(
+  ST_GeomFromText('POINT(2 4)'), 2, 2,
+  ST_GeomFromText('POINT(1 1)')));
+-- POINT(3 7)
+
+-- 座標指定で同じスケール / Same scaling using cx, cy
+SELECT ST_AsText(STX_Scale(
+  ST_GeomFromText('POINT(2 4)'), 2, 2,
+  1, 1));
+-- POINT(3 7)
 ```
 
 #### 備考 (Notes)
 
-スケールの基準は原点 (0, 0)。別の点を基準にしたい場合は `STX_Translate` で原点に移動し、スケール後に戻す。
-Scaling is relative to the origin (0, 0). To scale around a different center, use `STX_Translate` to shift to origin, scale, then shift back.
+基準点の指定方法は2通り：POINTジオメトリを渡す方法（4引数）と、座標値を直接渡す方法（5引数）。省略時は原点 (0, 0) が基準となる。
+Two ways to specify the scaling center: pass a POINT geometry (4 arguments) or pass coordinates directly (5 arguments). If omitted, the origin (0, 0) is used.
 
 #### 対応する他の関数 (Equivalent in Other Systems)
 
@@ -739,11 +758,13 @@ Scaling is relative to the origin (0, 0). To scale around a different center, us
 
 ### STX_Rotate
 
-ジオメトリを原点を中心に指定した角度（ラジアン）だけ回転する。
-Rotates a geometry by the given angle (radians) around the origin.
+ジオメトリを指定した角度（ラジアン）だけ回転する。回転中心を指定しない場合は原点 (0, 0) を中心に回転する。
+Rotates a geometry by the given angle (radians). If no center is specified, rotates around the origin (0, 0).
 
 ```sql
 STX_Rotate(geometry, angle) -> GEOMETRY
+STX_Rotate(geometry, angle, center_point) -> GEOMETRY
+STX_Rotate(geometry, angle, cx, cy) -> GEOMETRY
 ```
 
 #### 引数 (Arguments)
@@ -752,30 +773,47 @@ STX_Rotate(geometry, angle) -> GEOMETRY
 |---|---|---|
 | geometry | GEOMETRY | 対象のジオメトリ / Input geometry |
 | angle | DOUBLE | 回転角度（ラジアン、反時計回りが正） / Rotation angle in radians (positive = counterclockwise) |
+| center_point | GEOMETRY (POINT) | 回転中心のPOINTジオメトリ（省略時は原点） / Center of rotation as a POINT geometry (default: origin) |
+| cx, cy | DOUBLE, DOUBLE | 回転中心の座標（省略時は原点） / Center of rotation coordinates (default: origin) |
 
 #### 戻り値 (Return Value)
 
 回転後のジオメトリ（入力と同じ型・SRID）。全ジオメトリ型に対応。
 The rotated geometry (same type and SRID as input). All geometry types are supported.
 
+3引数形式で `center_point` のSRIDが入力ジオメトリと異なる場合はエラーとなる。
+In the 3-argument form, an error is returned if the SRID of `center_point` differs from the input geometry.
+
 #### 使用例 (Examples)
 
 ```sql
--- 点 (1,0) を 90° 回転 → (0,1) / Rotate (1,0) by 90 degrees -> (0,1)
+-- 点 (1,0) を原点中心に 90° 回転 → (0,1) / Rotate (1,0) by 90 degrees around origin -> (0,1)
 SELECT ST_AsText(STX_Rotate(
   ST_GeomFromText('POINT(1 0)'), PI() / 2));
 -- POINT(0 1)  (浮動小数点精度による近似 / approximate due to floating point)
 
--- 点 (1,0) を 180° 回転 → (-1,0) / Rotate 180 degrees -> (-1,0)
+-- 点 (1,0) を原点中心に 180° 回転 → (-1,0) / Rotate 180 degrees around origin -> (-1,0)
 SELECT ST_AsText(STX_Rotate(
   ST_GeomFromText('POINT(1 0)'), PI()));
 -- POINT(-1 0)
+
+-- 点 (2,0) を (1,0) を中心に 90° 回転 → (1,1) / Rotate (2,0) by 90 degrees around (1,0) -> (1,1)
+SELECT ST_AsText(STX_Rotate(
+  ST_GeomFromText('POINT(2 0)'), PI() / 2,
+  ST_GeomFromText('POINT(1 0)')));
+-- POINT(1 1)
+
+-- 座標指定で同じ回転 / Same rotation using cx, cy
+SELECT ST_AsText(STX_Rotate(
+  ST_GeomFromText('POINT(2 0)'), PI() / 2,
+  1, 0));
+-- POINT(1 1)
 ```
 
 #### 備考 (Notes)
 
-回転の中心は原点 (0, 0)。別の点を中心に回転したい場合は `STX_Translate` で原点に移動し、回転後に戻す。
-Rotation center is the origin (0, 0). To rotate around a different center, use `STX_Translate` to shift to origin, rotate, then shift back.
+回転中心の指定方法は2通り：POINTジオメトリを渡す方法（3引数）と、座標値を直接渡す方法（4引数）。省略時は原点 (0, 0) が回転中心となる。
+Two ways to specify the rotation center: pass a POINT geometry (3 arguments) or pass coordinates directly (4 arguments). If omitted, the origin (0, 0) is used.
 
 #### 対応する他の関数 (Equivalent in Other Systems)
 
