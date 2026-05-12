@@ -1,10 +1,12 @@
-# MySQL binary / source (placeholder dirs kept via .gitkeep)
-mysql960/*
-!mysql960/.gitkeep
-mysql960.source/*
-!mysql960.source/.gitkeep
-mysql970/
-mysql970.source/
+# MySQL binary / source
+# - mysql970*: placeholder dirs kept in the repo via .gitkeep (contents ignored)
+# - mysql960*: retired 9.6 env, kept locally for now, fully ignored
+mysql970/*
+!mysql970/.gitkeep
+mysql970.source/*
+!mysql970.source/.gitkeep
+mysql960/
+mysql960.source/
 mysql-*.tar.xz
 mysql-*.tar.gz
 
