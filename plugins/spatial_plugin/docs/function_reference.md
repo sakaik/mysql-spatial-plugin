@@ -1,7 +1,7 @@
 # STX Spatial Functions リファレンス (Reference)
 
-MySQL 9.6 用プラグイン `spatial_plugin` が提供する空間関数の仕様書。
-A specification of spatial functions provided by the `spatial_plugin` plugin for MySQL 9.6.
+MySQL 9.7 用プラグイン `spatial_plugin` が提供する空間関数の仕様書。
+A specification of spatial functions provided by the `spatial_plugin` plugin for MySQL 9.7.
 
 ## 概要 (Overview)
 
@@ -152,7 +152,7 @@ SELECT STX_Perimeter(
 #### 対応する他の関数 (Equivalent in Other Systems)
 
 - PostGIS: `ST_Perimeter()`
-- MySQL 標準: なし (not available in MySQL 9.6)
+- MySQL 標準: なし (not available in MySQL 9.7)
 
 ---
 

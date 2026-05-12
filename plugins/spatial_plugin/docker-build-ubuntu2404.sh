@@ -3,16 +3,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-IMAGE_NAME="spatial-plugin-builder-ol9"
-OUTPUT_NAME="spatial_plugin-glibc-2.34.so"
+IMAGE_NAME="spatial-plugin-builder-ubuntu2404"
+OUTPUT_NAME="spatial_plugin-glibc-2.39.so"
 
 # Build Docker image if not exists
 if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
     echo "Building Docker image: $IMAGE_NAME ..."
-    docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile.ol9" "$SCRIPT_DIR"
+    docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile.ubuntu2404" "$SCRIPT_DIR"
 fi
 
-echo "Building spatial_plugin for Oracle Linux 9 (glibc 2.34) ..."
+echo "Building spatial_plugin for Ubuntu 24.04 (glibc 2.39) ..."
 
 docker run --rm --network=host \
     -v "$PROJECT_ROOT/mysql970.source:/build/mysql970.source:ro" \

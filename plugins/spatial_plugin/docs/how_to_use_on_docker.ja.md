@@ -2,7 +2,7 @@
 
 ## 概要
 
-本プラグインを簡易的に MySQL 9.6 のDockerで動作させる手順を紹介します。
+本プラグインを簡易的に MySQL 9.7 のDockerで動作させる手順を紹介します。
 
 ## 前提条件
 
@@ -20,7 +20,7 @@ cd !$
 ```
 services:
     db:
-      image: mysql:9.6
+      image: mysql:9.7.0
       environment:
           MYSQL_ROOT_PASSWORD: mypass
           MYSQL_DATABASE: mydb
@@ -36,7 +36,7 @@ volumes:
 
 ### pluginを取得
 ```
-wget https://github.com/sakaik/mysql-spatial-plugin/releases/download/v0.2.0/spatial_plugin-glibc-2.34.so
+wget https://github.com/sakaik/mysql-spatial-plugin/releases/download/v0.3.0/spatial_plugin-glibc-2.34.so
 ```
 
 ### dockerでMySQLサーバを起動
@@ -59,7 +59,7 @@ docker compose exec db mysql -u root -pmypass mydb
 	mysql: [Warning] Using a password on the command line interface can be insecure.
 	Welcome to the MySQL monitor.  Commands end with ; or \g.
 	Your MySQL connection id is 9
-	Server version: 9.6.0 MySQL Community Server - GPL
+	Server version: 9.7.0 MySQL Community Server - GPL
 
 	Copyright (c) 2000, 2026, Oracle and/or its affiliates.
 

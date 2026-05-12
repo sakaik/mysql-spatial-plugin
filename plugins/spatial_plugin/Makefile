@@ -1,9 +1,16 @@
-MYSQL_SOURCE = ../../mysql960.source
-MYSQL_BINARY = ../../mysql960
+MYSQL_SOURCE = ../../mysql970.source
+MYSQL_BINARY = ../../mysql970
 BOOST_DIR = $(MYSQL_SOURCE)/extra/boost/boost_1_87_0
 PLUGIN_DIR = $(MYSQL_BINARY)/lib/plugin
 GEOS_DIR = ../../geos
 GEOS_BUILD = $(GEOS_DIR)/build
+
+# libmysqlservices: built from the MySQL source tree, not taken from the binary
+# distribution. The 9.7 binary dist ships libmysqlservices.a compiled with LTO
+# (GCC 14 bytecode), which g++ 13/11 cannot link. The source build (WITH_LTO=OFF)
+# produces a plain-object archive that links with any recent GCC.
+# Build it once with: (cd $(MYSQL_SOURCE)/build && cmake .. -DDOWNLOAD_BOOST=0 -DWITH_CURL=0 && make mysqlservices)
+MYSQL_SERVICES_DIR = $(MYSQL_SOURCE)/build/libservices
 
 CXX = g++
 CXXFLAGS = -shared -fPIC -std=c++17 -O2 -fvisibility=hidden -DMYSQL_DYNAMIC_PLUGIN \
@@ -25,7 +32,7 @@ MYSQL = $(MYSQL_BINARY)/bin/mysql --socket=$(MYSQL_BINARY)/mysql.sock -u root
 
 -include local.mk
 
-.PHONY: all install clean generate-srids test reload geos
+.PHONY: all install clean generate-srids test reload geos docker-build-ol9 docker-build-ubuntu2404 docker-test-mysql97
 
 all: $(TARGET)
 
@@ -34,8 +41,13 @@ $(TARGET): $(SOURCES) ../gis_lib/wkb_parser.h ../gis_lib/geometry_types.h ../gis
 		echo "ERROR: libgeos.a not found. Run 'make geos' first to build GEOS."; \
 		exit 1; \
 	fi
+	@if [ ! -f $(MYSQL_SERVICES_DIR)/libmysqlservices.a ]; then \
+		echo "ERROR: $(MYSQL_SERVICES_DIR)/libmysqlservices.a not found."; \
+		echo "Build it: (cd $(MYSQL_SOURCE)/build && cmake .. -DDOWNLOAD_BOOST=0 -DWITH_CURL=0 && make mysqlservices)"; \
+		exit 1; \
+	fi
 	$(CXX) $(CXXFLAGS) -o $@ $(SOURCES) \
-		-L $(MYSQL_BINARY)/lib -lmysqlservices \
+		-L $(MYSQL_SERVICES_DIR) -lmysqlservices \
 		-L $(GEOS_BUILD)/lib -lgeos_c -lgeos -lstdc++ -lm
 
 geos:
@@ -51,13 +63,16 @@ geos:
 	@echo "GEOS build complete: $(GEOS_BUILD)/lib/libgeos.a"
 
 install: $(TARGET)
+	# rm first so cp creates a fresh inode: overwriting a currently-loaded .so
+	# in place corrupts its mmap'd pages and crashes a subsequent UNINSTALL.
+	rm -f $(PLUGIN_DIR)/$(TARGET)
 	cp $(TARGET) $(PLUGIN_DIR)/
 
 generate-srids:
 	../gis_lib/generate_srids.sh "$(MYSQL)"
 
 reload: install
-	$(MYSQL) -e "UNINSTALL PLUGIN spatial_plugin; INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';"
+	$(MYSQL) --force -e "UNINSTALL PLUGIN spatial_plugin; INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';"
 
 test:
 	$(MYSQL) < test.sql
@@ -65,8 +80,13 @@ test:
 clean:
 	rm -f $(TARGET)
 
-# --- Docker cross-build ---
-.PHONY: docker-build-ol9
-
+# --- Docker release builds (built against MySQL 9.7) ---
 docker-build-ol9:
 	./docker-build-ol9.sh
+
+docker-build-ubuntu2404:
+	./docker-build-ubuntu2404.sh
+
+# --- Run the test suite against MySQL 9.7 inside a container ---
+docker-test-mysql97:
+	./docker-test-mysql97.sh

@@ -106,16 +106,16 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 ## 動作要件
 
-- MySQL 8.0 以降
+- MySQL 9.7.0（同梱のビルド済みバイナリは **MySQL 9.7.0** 用。デーモンプラグインは MySQL のバージョンに厳密に紐づくため、他バージョンではソースからリビルドが必要）
 - C++17 対応の g++
 - MySQL ソースツリー（ヘッダファイルおよび Boost.Geometry を使用）
-- MySQL バイナリインストール（`libmysqlservices` およびプラグインディレクトリを使用）
+- MySQL バイナリインストール（プラグインディレクトリを使用）
 
 ## ディレクトリ構成
 
 ```
-├── mysql960.source/        # MySQL ソースツリー（ヘッダ + Boost）
-├── mysql960/               # MySQL バイナリインストール
+├── mysql970.source/        # MySQL ソースツリー（ヘッダ + Boost）
+├── mysql970/               # MySQL バイナリインストール
 └── plugins/
     ├── gis_lib/            # 共有 GIS ライブラリ（WKB パーサー、型定義）
     └── spatial_plugin/     # プラグインソース
@@ -127,28 +127,30 @@ MySQL に不足している空間関数を追加するプラグインです。[B
             └── function_reference.md
 ```
 
-`mysql960.source/` と `mysql960/` はリポジトリに含まれていません。
+`mysql970.source/` と `mysql970/` はリポジトリに含まれていません。
 [MySQL Downloads](https://dev.mysql.com/downloads/mysql/) からダウンロードして配置してください：
 
-- **ソース**: `mysql-9.6.0.tar.gz` — 展開してビルド（`cmake` + `make`）後、`mysql960.source/` にリネーム
-- **バイナリ**: `mysql-9.6.0-linux-glibc2.28-x86_64.tar.xz` — 展開して `mysql960/` にリネーム
+- **ソース**: `mysql-9.7.0.tar.gz` — 展開後、`build/` サブディレクトリで `cmake ..` を実行し `make mysqlservices`（フルビルドは不要）。ツリーを `mysql970.source/` にリネーム
+- **バイナリ**: `mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz` — 展開して `mysql970/` にリネーム
 
 両ディレクトリをリポジトリのルート（`plugins/` と同階層）に配置してください。
 
 ## ビルド済みバイナリ
 
-**MySQL 9.6.x（Linux x86_64）** 用のビルド済みバイナリが2種類同梱されています：
+**MySQL 9.7.0（Linux x86_64）** 用のビルド済みバイナリが2種類同梱されています：
 
 | ファイル | ビルド環境 | 必要な glibc | 対象プラットフォーム |
 |---|---|---|---|
-| `spatial_plugin.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38 以上 | Ubuntu 24.04、Debian 13 以降、Fedora 39 以降 |
+| `spatial_plugin-glibc-2.39.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38 以上 | Ubuntu 24.04 以降、Debian 13 以降、Fedora 39 以降 |
 | `spatial_plugin-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32 以上 | OL9、RHEL 9、AlmaLinux 9、Rocky Linux 9、Ubuntu 22.04 以降 |
 
-ご使用のシステムの glibc バージョンに合ったバイナリを選択してください。`ldd --version` で確認できます。
-`spatial_plugin-glibc-2.34.so` を使用する場合は、MySQL プラグインディレクトリに配置する前に `spatial_plugin.so` にリネーム（またはシンボリックリンク作成）してください。
+ご使用のシステムの glibc バージョンに合ったバイナリを選択してください（`ldd --version` で確認。glibc の低いバイナリは新しいシステムでもそのまま動作します）。選んだファイルをそのまま MySQL プラグインディレクトリにコピーし、ファイル名で読み込みます：
 
-これらのバイナリはコンパイル時の MySQL バージョンに紐づいており、他のバージョンでは使用できません。
-異なるバージョンの MySQL で使用する場合は、ソースからリビルドしてください。
+```sql
+INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-glibc-2.34.so';   -- コピーしたファイル名を指定
+```
+
+これらのバイナリはコンパイル時の MySQL バージョン（**9.7.0**）に紐づいており、他のバージョンでは使用できません。異なるバージョンの MySQL で使用する場合は、ソースからリビルドしてください。
 
 ## ビルド
 
@@ -164,7 +166,7 @@ make install    # .so を MySQL プラグインディレクトリにコピー
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-全58関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
+全62関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
 -- 確認
@@ -220,7 +222,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## テスト
 
 ```bash
-make test       # テストスイートを実行（291テスト）
+make test       # テストスイートを実行（361テスト）
 ```
 
 ## ライセンス

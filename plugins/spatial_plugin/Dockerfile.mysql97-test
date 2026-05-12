@@ -1,0 +1,13 @@
+FROM ubuntu:24.04
+
+# Runtime libs required by the MySQL 9.7 generic Linux binaries.
+# Ubuntu 24.04 ships libaio as libaio.so.1t64 (64-bit time_t transition),
+# but the MySQL binaries are linked against the classic libaio.so.1 soname,
+# so add a compatibility symlink.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        libaio1t64 libnuma1 libncurses6 libtinfo6 && \
+    ln -sf libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work

@@ -106,16 +106,16 @@ See [Function Reference](plugins/spatial_plugin/docs/function_reference.md) for 
 
 ## Requirements
 
-- MySQL 8.0 or later
+- MySQL 9.7.0 (the pre-built binaries are built for **MySQL 9.7.0**; daemon plugins are tied to the exact MySQL version, so for other versions rebuild from source)
 - g++ with C++17 support
 - MySQL source tree (for headers and Boost.Geometry)
-- MySQL binary installation (for `libmysqlservices` and plugin directory)
+- MySQL binary installation (for the plugin directory)
 
 ## Directory Structure
 
 ```
-├── mysql960.source/        # MySQL source tree (headers + Boost)
-├── mysql960/               # MySQL binary installation
+├── mysql970.source/        # MySQL source tree (headers + Boost)
+├── mysql970/               # MySQL binary installation
 └── plugins/
     ├── gis_lib/            # Shared GIS library (WKB parser, geometry types)
     └── spatial_plugin/     # Plugin source
@@ -127,28 +127,30 @@ See [Function Reference](plugins/spatial_plugin/docs/function_reference.md) for 
             └── function_reference.md
 ```
 
-The `mysql960.source/` and `mysql960/` directories are not included in this repository.
+The `mysql970.source/` and `mysql970/` directories are not included in this repository.
 Download and extract them from [MySQL Downloads](https://dev.mysql.com/downloads/mysql/):
 
-- **Source**: `mysql-9.6.0.tar.gz` — extract and build (`cmake` + `make`), then rename to `mysql960.source/`
-- **Binary**: `mysql-9.6.0-linux-glibc2.28-x86_64.tar.xz` — extract and rename to `mysql960/`
+- **Source**: `mysql-9.7.0.tar.gz` — extract, then configure with `cmake` (a full build is not required; run `cmake ..` in a `build/` subdirectory and `make mysqlservices`); rename the tree to `mysql970.source/`
+- **Binary**: `mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz` — extract and rename to `mysql970/`
 
 Both directories should be placed at the repository root (siblings of `plugins/`).
 
 ## Pre-built Binaries
 
-Two pre-built binaries are included for **MySQL 9.6.x on Linux (x86_64)**:
+Two pre-built binaries are included for **MySQL 9.7.0 on Linux (x86_64)**:
 
 | File | Build Environment | Required glibc | Target Platforms |
 |---|---|---|---|
-| `spatial_plugin.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38+ | Ubuntu 24.04, Debian 13+, Fedora 39+ |
+| `spatial_plugin-glibc-2.39.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38+ | Ubuntu 24.04+, Debian 13+, Fedora 39+ |
 | `spatial_plugin-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32+ | OL9, RHEL 9, AlmaLinux 9, Rocky Linux 9, Ubuntu 22.04+ |
 
-Choose the binary matching your system's glibc version. Check with `ldd --version`.
-When using `spatial_plugin-glibc-2.34.so`, rename (or symlink) it to `spatial_plugin.so` before placing it in the MySQL plugin directory.
+Pick the binary matching your system's glibc version (check with `ldd --version`; a lower-glibc binary also runs on newer systems). Copy it as-is to the MySQL plugin directory and load it by file name:
 
-The binaries are tied to the MySQL version they were compiled against and cannot be used with other versions.
-To use a different MySQL version, rebuild from source (see below).
+```sql
+INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-glibc-2.34.so';   -- use the file name you copied
+```
+
+The binaries are tied to the MySQL version they were compiled against (**9.7.0**) and cannot be used with other versions. To use a different MySQL version, rebuild from source (see below).
 
 ## Build
 
@@ -164,7 +166,7 @@ make install    # Copy .so to MySQL plugin directory
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-All 58 functions are registered automatically. No `CREATE FUNCTION` needed.
+All 62 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
 -- Verify
@@ -220,7 +222,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## Tests
 
 ```bash
-make test       # Run test suite (291 tests)
+make test       # Run test suite (361 tests)
 ```
 
 ## License

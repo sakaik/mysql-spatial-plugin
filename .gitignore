@@ -3,6 +3,8 @@ mysql960/*
 !mysql960/.gitkeep
 mysql960.source/*
 !mysql960.source/.gitkeep
+mysql970/
+mysql970.source/
 mysql-*.tar.xz
 mysql-*.tar.gz
 
@@ -14,7 +16,8 @@ local.mk
 
 # Build artifacts
 *.o
-# spatial_plugin-glibc-*.so is tracked (not ignored)
+# `make` output for the native dev build (the released spatial_plugin-glibc-*.so binaries ARE tracked)
+/plugins/spatial_plugin/spatial_plugin.so
 
 # Claude Code config
 .claude/
