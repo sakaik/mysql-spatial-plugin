@@ -1,0 +1,18 @@
+FROM oraclelinux:9
+
+# Tools required by MySQL cmake configure + building the mysqlservices target.
+# MySQL 9.7+/26.x cmake explicitly probes for gcc-toolset-14 on el9. We install
+# the devtoolset and put it on PATH so cmake picks it up without scl enable.
+# Kept separate from Dockerfile.ol9 (release builder) to keep the release image lean.
+RUN dnf install -y --enablerepo=ol9_codeready_builder \
+    gcc-toolset-14 gcc-toolset-14-annobin-annocheck gcc-toolset-14-annobin-plugin-gcc \
+    cmake make bison perl rpcgen \
+    openssl-devel ncurses-devel libtirpc-devel libaio-devel zlib-devel \
+    && dnf clean all
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH \
+    LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64 \
+    CC=/opt/rh/gcc-toolset-14/root/usr/bin/gcc \
+    CXX=/opt/rh/gcc-toolset-14/root/usr/bin/g++
+
+WORKDIR /src

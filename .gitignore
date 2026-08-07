@@ -1,10 +1,15 @@
-# MySQL binary / source
-# - mysql970*: placeholder dirs kept in the repo via .gitkeep (contents ignored)
-# - mysql960*: retired 9.6 env, kept locally for now, fully ignored
-mysql970/*
-!mysql970/.gitkeep
-mysql970.source/*
-!mysql970.source/.gitkeep
+# MySQL binary / source — all ignored; see plugins/spatial_plugin/extract-buildkit.sh
+# and README for how they are set up. Legacy dev dirs (mysql970/, mysql960/) are
+# kept locally for now but not committed.
+# - mysql-buildkits/: extracted headers + libmysqlservices.a per MySQL version + shared boost
+# - build-artifacts/: per-version .so outputs from docker-build.sh
+# - mysql-<VER>/ and mysql-<VER>.source/: native dev installs (e.g. 26.7.0)
+mysql-buildkits/
+build-artifacts/
+mysql-*.*.*/
+mysql-*.*.*.source/
+mysql970/
+mysql970.source/
 mysql960/
 mysql960.source/
 mysql-*.tar.xz

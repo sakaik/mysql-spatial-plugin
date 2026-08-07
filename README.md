@@ -106,59 +106,98 @@ See [Function Reference](plugins/spatial_plugin/docs/function_reference.md) for 
 
 ## Requirements
 
-- MySQL 9.7.0 (the pre-built binaries are built for **MySQL 9.7.0**; daemon plugins are tied to the exact MySQL version, so for other versions rebuild from source)
-- g++ with C++17 support
-- MySQL source tree (for headers and Boost.Geometry)
-- MySQL binary installation (for the plugin directory)
+Daemon plugins are tied to the exact MySQL version (patch level included), so
+each MySQL version needs its own `.so`. Supported MySQL tracks:
+
+- **LTS**: MySQL 9.7.x (a new `.so` is built for each patch release)
+- **Innovation**: calendar-versioned releases starting July 2026
+  (26.7 → 26.10 → 27.1 → …, quarterly)
+- **MySQL 9.6** support ended with plugin **v0.2.0** — 9.6 users should stay on that release
+
+For building from source: MySQL source tree (headers + Boost), g++ with C++17
+support, and a MySQL binary installation for the plugin directory. Multi-version
+release builds use Docker (see [Build](#build)).
 
 ## Directory Structure
 
 ```
-├── mysql970.source/        # MySQL source tree (headers + Boost)
-├── mysql970/               # MySQL binary installation
+├── mysql-buildkits/           # per-MySQL-version source + libmysqlservices.a kits (auto-generated)
+│   ├── boost_1_87_0/          #   shared Boost dir (populated from the first extracted MySQL source)
+│   ├── 9.7.2/                 #   ~300MB per version (source tree minus mysql-test/, plus compiled libmysqlservices.a)
+│   └── 26.7.0/
+├── build-artifacts/           # per-version .so outputs from docker-build.sh
+│   └── 26.7.0/spatial_plugin-mysql-26.7.0-glibc-{2.34,2.39}.so
+├── mysql-26.7.0/              # native dev install (MySQL binary; whichever version is current)
+├── mysql-26.7.0.source/       #   full source tree kept only for the current dev version
 └── plugins/
-    ├── gis_lib/            # Shared GIS library (WKB parser, geometry types)
-    └── spatial_plugin/     # Plugin source
+    ├── gis_lib/               # shared GIS library (WKB parser, geometry types)
+    └── spatial_plugin/        # plugin source
         ├── spatial_plugin.cc
         ├── plugin_version.h
         ├── Makefile
+        ├── extract-buildkit.sh
+        ├── docker-build.sh
+        ├── docker-test.sh
         ├── test.sql
-        └── docs/
-            └── function_reference.md
+        └── docs/function_reference.md
 ```
 
-The `mysql970.source/` and `mysql970/` directories are not included in this repository.
-Download and extract them from [MySQL Downloads](https://dev.mysql.com/downloads/mysql/):
-
-- **Source**: `mysql-9.7.0.tar.gz` — extract, then configure with `cmake` (a full build is not required; run `cmake ..` in a `build/` subdirectory and `make mysqlservices`); rename the tree to `mysql970.source/`
-- **Binary**: `mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz` — extract and rename to `mysql970/`
-
-Both directories should be placed at the repository root (siblings of `plugins/`).
+`mysql-buildkits/`, `build-artifacts/`, and the `mysql-<version>*/` dev installs
+are not committed to this repository. Download the MySQL source tarball you need
+from [MySQL Downloads](https://dev.mysql.com/downloads/mysql/); `extract-buildkit.sh`
+fetches it automatically when building for a version that has no local buildkit yet.
 
 ## Pre-built Binaries
 
-Two pre-built binaries are included for **MySQL 9.7.0 on Linux (x86_64)**:
+Two variants are built per MySQL version, differing only in target glibc:
 
-| File | Build Environment | Required glibc | Target Platforms |
+| File pattern | Build Environment | Required glibc | Target Platforms |
 |---|---|---|---|
-| `spatial_plugin-glibc-2.39.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38+ | Ubuntu 24.04+, Debian 13+, Fedora 39+ |
-| `spatial_plugin-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32+ | OL9, RHEL 9, AlmaLinux 9, Rocky Linux 9, Ubuntu 22.04+ |
+| `spatial_plugin-mysql-<VER>-glibc-2.39.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38+ | Ubuntu 24.04+, Debian 13+, Fedora 39+ |
+| `spatial_plugin-mysql-<VER>-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32+ | OL9, RHEL 9, AlmaLinux/Rocky 9, Ubuntu 22.04+ |
 
-Pick the binary matching your system's glibc version (check with `ldd --version`; a lower-glibc binary also runs on newer systems). Copy it as-is to the MySQL plugin directory and load it by file name:
+Check the [Releases page](https://github.com/sakaik/mysql-spatial-plugin/releases)
+for the current MySQL versions we ship binaries for. Each `.so` reports the MySQL
+version it was built against via `SHOW STATUS LIKE 'spatial_plugin_built_for'`;
+it must match your server or `INSTALL PLUGIN` will fail.
+
+Pick the binary matching your MySQL version and your system's glibc (check with
+`ldd --version`; a lower-glibc binary also runs on newer systems). Copy it as-is
+to the MySQL plugin directory and load it by file name:
 
 ```sql
-INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-glibc-2.34.so';   -- use the file name you copied
+INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-mysql-26.7.0-glibc-2.34.so';
+
+-- Verify the .so matches your server:
+SHOW STATUS LIKE 'spatial_plugin_%';
 ```
 
-The binaries are tied to the MySQL version they were compiled against (**9.7.0**) and cannot be used with other versions. To use a different MySQL version, rebuild from source (see below).
+**Legacy assets in v0.3.0** — the two files without a MySQL version in the name
+(`spatial_plugin-glibc-2.39.so`, `spatial_plugin-glibc-2.34.so`) were the initial
+build for **MySQL 9.7.0**. Newer MySQL versions ship under the versioned name
+above. For MySQL 9.6, stay on plugin v0.2.0.
 
 ## Build
 
+Native dev build (uses the sibling `mysql-<VER>/` install):
+
 ```bash
 cd plugins/spatial_plugin
-make            # Compile spatial_plugin.so
-make install    # Copy .so to MySQL plugin directory
+make            # compile spatial_plugin.so
+make install    # copy .so to MySQL plugin directory
 ```
+
+Multi-version release build via Docker (any supported MySQL version):
+
+```bash
+cd plugins/spatial_plugin
+make build-mysql   MYSQL_VER=26.7.0   # extract buildkit, build both glibc variants, run test suite
+make release-mysql MYSQL_VER=26.7.0   # upload .so files to the current GitHub release (--clobber not used)
+```
+
+`extract-buildkit.sh` downloads and processes the MySQL source tarball on first
+use for a given version (~5 minutes; cached under `mysql-buildkits/.cache/`).
+Subsequent `make build-mysql` runs for the same version skip extraction.
 
 ## Installation
 

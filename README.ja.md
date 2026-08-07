@@ -106,59 +106,98 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 ## 動作要件
 
-- MySQL 9.7.0（同梱のビルド済みバイナリは **MySQL 9.7.0** 用。デーモンプラグインは MySQL のバージョンに厳密に紐づくため、他バージョンではソースからリビルドが必要）
-- C++17 対応の g++
-- MySQL ソースツリー（ヘッダファイルおよび Boost.Geometry を使用）
-- MySQL バイナリインストール（プラグインディレクトリを使用）
+デーモンプラグインは MySQL のバージョン（patch レベルまで）に厳密に紐づくため、
+MySQL 1バージョンにつき専用の `.so` が必要です。対応する MySQL のトラック：
+
+- **LTS**: MySQL 9.7.x（patch リリースごとに新しい `.so` を追加ビルド）
+- **Innovation**: 2026年7月から始まる暦ベース版
+  （26.7 → 26.10 → 27.1 → …、四半期リリース）
+- **MySQL 9.6** サポートはプラグイン **v0.2.0** をもって終了 — 9.6 環境の方は v0.2.0 をご利用ください
+
+ソースからビルドする場合: MySQL ソースツリー（ヘッダ + Boost）、C++17 対応の g++、
+MySQL バイナリインストール（プラグインディレクトリを使用）。マルチバージョンの
+リリースビルドは Docker を利用します（[ビルド](#ビルド) 参照）。
 
 ## ディレクトリ構成
 
 ```
-├── mysql970.source/        # MySQL ソースツリー（ヘッダ + Boost）
-├── mysql970/               # MySQL バイナリインストール
+├── mysql-buildkits/           # MySQL バージョンごとのソース + libmysqlservices.a キット（自動生成）
+│   ├── boost_1_87_0/          #   共有 Boost ディレクトリ（初回抽出時に配置）
+│   ├── 9.7.2/                 #   1バージョンあたり約300MB（source tree から mysql-test/ を除外、compiled libmysqlservices.a 込み）
+│   └── 26.7.0/
+├── build-artifacts/           # docker-build.sh が生成する版別の .so
+│   └── 26.7.0/spatial_plugin-mysql-26.7.0-glibc-{2.34,2.39}.so
+├── mysql-26.7.0/              # ネイティブ開発用インストール（現行 dev バージョン）
+├── mysql-26.7.0.source/       #   フルソースは現行 dev バージョン分のみ保持
 └── plugins/
-    ├── gis_lib/            # 共有 GIS ライブラリ（WKB パーサー、型定義）
-    └── spatial_plugin/     # プラグインソース
+    ├── gis_lib/               # 共有 GIS ライブラリ（WKB パーサー、型定義）
+    └── spatial_plugin/        # プラグインソース
         ├── spatial_plugin.cc
         ├── plugin_version.h
         ├── Makefile
+        ├── extract-buildkit.sh
+        ├── docker-build.sh
+        ├── docker-test.sh
         ├── test.sql
-        └── docs/
-            └── function_reference.md
+        └── docs/function_reference.md
 ```
 
-`mysql970.source/` と `mysql970/` はリポジトリに含まれていません。
-[MySQL Downloads](https://dev.mysql.com/downloads/mysql/) からダウンロードして配置してください：
-
-- **ソース**: `mysql-9.7.0.tar.gz` — 展開後、`build/` サブディレクトリで `cmake ..` を実行し `make mysqlservices`（フルビルドは不要）。ツリーを `mysql970.source/` にリネーム
-- **バイナリ**: `mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz` — 展開して `mysql970/` にリネーム
-
-両ディレクトリをリポジトリのルート（`plugins/` と同階層）に配置してください。
+`mysql-buildkits/`、`build-artifacts/`、および `mysql-<version>*/` の dev インストールは
+リポジトリには含まれていません。必要な MySQL ソースの取得は自動化されています
+（`extract-buildkit.sh` が [MySQL Downloads](https://dev.mysql.com/downloads/mysql/) から
+初回のみ tarball をダウンロードしてキャッシュします）。
 
 ## ビルド済みバイナリ
 
-**MySQL 9.7.0（Linux x86_64）** 用のビルド済みバイナリが2種類同梱されています：
+MySQL バージョンごとに glibc 2種類のバイナリを提供します：
 
-| ファイル | ビルド環境 | 必要な glibc | 対象プラットフォーム |
+| ファイル名パターン | ビルド環境 | 必要な glibc | 対象プラットフォーム |
 |---|---|---|---|
-| `spatial_plugin-glibc-2.39.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38 以上 | Ubuntu 24.04 以降、Debian 13 以降、Fedora 39 以降 |
-| `spatial_plugin-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32 以上 | OL9、RHEL 9、AlmaLinux 9、Rocky Linux 9、Ubuntu 22.04 以降 |
+| `spatial_plugin-mysql-<VER>-glibc-2.39.so` | Ubuntu 24.04 (glibc 2.39) | glibc 2.38 以上 | Ubuntu 24.04 以降、Debian 13 以降、Fedora 39 以降 |
+| `spatial_plugin-mysql-<VER>-glibc-2.34.so` | Oracle Linux 9 (glibc 2.34) | glibc 2.32 以上 | OL9、RHEL 9、AlmaLinux/Rocky 9、Ubuntu 22.04 以降 |
 
-ご使用のシステムの glibc バージョンに合ったバイナリを選択してください（`ldd --version` で確認。glibc の低いバイナリは新しいシステムでもそのまま動作します）。選んだファイルをそのまま MySQL プラグインディレクトリにコピーし、ファイル名で読み込みます：
+対応済み MySQL バージョンの一覧は [Releases ページ](https://github.com/sakaik/mysql-spatial-plugin/releases)
+を参照してください。各 `.so` は `SHOW STATUS LIKE 'spatial_plugin_built_for'`
+でビルド対象の MySQL バージョンを申告し、稼働中の MySQL と一致しない場合は
+`INSTALL PLUGIN` が失敗します。
+
+MySQL バージョンとシステムの glibc に合致するバイナリを選び（`ldd --version` で確認。
+glibc の低いバイナリは新しいシステムでも動作します）、そのまま MySQL の plugin
+ディレクトリにコピーしてファイル名で読み込みます：
 
 ```sql
-INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-glibc-2.34.so';   -- コピーしたファイル名を指定
+INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-mysql-26.7.0-glibc-2.34.so';
+
+-- .so とサーバのバージョン整合性を確認：
+SHOW STATUS LIKE 'spatial_plugin_%';
 ```
 
-これらのバイナリはコンパイル時の MySQL バージョン（**9.7.0**）に紐づいており、他のバージョンでは使用できません。異なるバージョンの MySQL で使用する場合は、ソースからリビルドしてください。
+**v0.3.0 の旧命名アセット** — MySQL バージョンを含まない
+`spatial_plugin-glibc-2.39.so` / `spatial_plugin-glibc-2.34.so` は **MySQL 9.7.0** 専用の
+初回ビルドです。新しい MySQL 版はバージョン付きの名前で公開されます。
+MySQL 9.6 環境の方は プラグイン v0.2.0 のままご利用ください。
 
 ## ビルド
+
+ネイティブ開発ビルド（`mysql-<VER>/` と同階層の想定）：
 
 ```bash
 cd plugins/spatial_plugin
 make            # spatial_plugin.so をコンパイル
 make install    # .so を MySQL プラグインディレクトリにコピー
 ```
+
+Docker による対応バージョン別リリースビルド：
+
+```bash
+cd plugins/spatial_plugin
+make build-mysql   MYSQL_VER=26.7.0   # buildkit 抽出 → glibc 2種でビルド → test.sql 実行
+make release-mysql MYSQL_VER=26.7.0   # 生成された .so を現行 GitHub Release にアップロード（--clobber なし）
+```
+
+`extract-buildkit.sh` は指定 MySQL 版の buildkit が未整備の場合、初回のみ MySQL の
+ソース tarball をダウンロードして必要な成果物を抽出します（約5分、`mysql-buildkits/.cache/`
+にキャッシュ）。以降の `make build-mysql` では抽出処理はスキップされます。
 
 ## インストール
 
