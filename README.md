@@ -127,8 +127,9 @@ release builds use Docker (see [Build](#build)).
 │   └── 26.7.0/
 ├── build-artifacts/           # per-version .so outputs from docker-build.sh
 │   └── 26.7.0/spatial_plugin-mysql-26.7.0-glibc-{2.34,2.39}.so
-├── mysql-26.7.0/              # native dev install (MySQL binary; whichever version is current)
-├── mysql-26.7.0.source/       #   full source tree kept only for the current dev version
+├── mysql-<DEV_VER>/           # native dev install (MySQL binary). Current dev
+├── mysql-<DEV_VER>.source/    #   version defaults to 9.7.0 (legacy dir: mysql970/);
+│                              #   override with DEV_MYSQL_VER=X.Y.Z on `make`
 └── plugins/
     ├── gis_lib/               # shared GIS library (WKB parser, geometry types)
     └── spatial_plugin/        # plugin source
@@ -179,13 +180,21 @@ above. For MySQL 9.6, stay on plugin v0.2.0.
 
 ## Build
 
-Native dev build (uses the sibling `mysql-<VER>/` install):
+Native dev build (compiles against the sibling `mysql-<DEV_MYSQL_VER>/` install):
 
 ```bash
 cd plugins/spatial_plugin
-make            # compile spatial_plugin.so
+make            # compile spatial_plugin.so against DEV_MYSQL_VER (default 9.7.0)
 make install    # copy .so to MySQL plugin directory
+
+# Build against a different local MySQL install:
+make DEV_MYSQL_VER=26.7.0
 ```
+
+`DEV_MYSQL_VER` defaults to `9.7.0`; the Makefile looks for
+`../../mysql-<DEV_MYSQL_VER>/` first and falls back to the legacy
+dotted-out name (`mysql970/` for 9.7.0) if only the legacy dir is present.
+Set `DEV_MYSQL_VER` on the make command line or in `local.mk`.
 
 Multi-version release build via Docker (any supported MySQL version):
 
@@ -201,14 +210,20 @@ Subsequent `make build-mysql` runs for the same version skip extraction.
 
 ## Installation
 
+Load the .so by the file name you copied into the MySQL plugin directory:
+
 ```sql
+-- Pre-built binary (recommended): file name embeds MySQL version + glibc floor
+INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-mysql-26.7.0-glibc-2.34.so';
+
+-- Or, when using the native dev build's `make install` output:
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
 All 62 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
--- Verify
+-- Verify — spatial_plugin_built_for shows the exact MySQL version the .so was compiled against
 SELECT * FROM performance_schema.user_defined_functions WHERE UDF_NAME LIKE 'stx_%';
 SHOW STATUS LIKE 'spatial_plugin_%';
 ```

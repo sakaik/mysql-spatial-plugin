@@ -127,8 +127,9 @@ MySQL バイナリインストール（プラグインディレクトリを使�
 │   └── 26.7.0/
 ├── build-artifacts/           # docker-build.sh が生成する版別の .so
 │   └── 26.7.0/spatial_plugin-mysql-26.7.0-glibc-{2.34,2.39}.so
-├── mysql-26.7.0/              # ネイティブ開発用インストール（現行 dev バージョン）
-├── mysql-26.7.0.source/       #   フルソースは現行 dev バージョン分のみ保持
+├── mysql-<DEV_VER>/           # ネイティブ開発用インストール（MySQL バイナリ）。
+├── mysql-<DEV_VER>.source/    #   現在のデフォルト dev は 9.7.0（旧命名: mysql970/）。
+│                              #   `make DEV_MYSQL_VER=X.Y.Z` で切り替え可能
 └── plugins/
     ├── gis_lib/               # 共有 GIS ライブラリ（WKB パーサー、型定義）
     └── spatial_plugin/        # プラグインソース
@@ -179,13 +180,20 @@ MySQL 9.6 環境の方は プラグイン v0.2.0 のままご利用ください�
 
 ## ビルド
 
-ネイティブ開発ビルド（`mysql-<VER>/` と同階層の想定）：
+ネイティブ開発ビルド（同階層の `mysql-<DEV_MYSQL_VER>/` に対してコンパイル）：
 
 ```bash
 cd plugins/spatial_plugin
-make            # spatial_plugin.so をコンパイル
+make            # DEV_MYSQL_VER (デフォルト 9.7.0) を対象に spatial_plugin.so をコンパイル
 make install    # .so を MySQL プラグインディレクトリにコピー
+
+# 別バージョンのネイティブ MySQL に対してビルド：
+make DEV_MYSQL_VER=26.7.0
 ```
+
+`DEV_MYSQL_VER` はデフォルト `9.7.0`。Makefile はまず `../../mysql-<DEV_MYSQL_VER>/`
+を探し、なければ旧命名（9.7.0 なら `mysql970/`）にフォールバックします。
+`local.mk` で `DEV_MYSQL_VER` や `MYSQL_BINARY` / `MYSQL_SOURCE` を上書き可能。
 
 Docker による対応バージョン別リリースビルド：
 
@@ -201,14 +209,20 @@ make release-mysql MYSQL_VER=26.7.0   # 生成された .so を現行 GitHub Rel
 
 ## インストール
 
+MySQL の plugin ディレクトリに置いたファイル名で load します：
+
 ```sql
+-- ビルド済みバイナリを使う場合（推奨）: ファイル名に MySQL バージョン + glibc floor が入っている
+INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-mysql-26.7.0-glibc-2.34.so';
+
+-- ネイティブビルド（make install）の成果物を使う場合：
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
 全62関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
--- 確認
+-- 確認 — spatial_plugin_built_for に .so のビルド対象 MySQL バージョンが表示される
 SELECT * FROM performance_schema.user_defined_functions WHERE UDF_NAME LIKE 'stx_%';
 SHOW STATUS LIKE 'spatial_plugin_%';
 ```

@@ -1,15 +1,40 @@
-MYSQL_SOURCE = ../../mysql970.source
-MYSQL_BINARY = ../../mysql970
+# --- Native dev build target -----------------------------------------------
+# The sibling MySQL install to build/test against. Defaults to 9.7.0 (the
+# initial dev version). Override on the command line (make DEV_MYSQL_VER=26.7.0)
+# or in local.mk when you migrate the native dev install to a newer MySQL.
+DEV_MYSQL_VER ?= 9.7.0
+
+# Prefer the new naming (mysql-<VER>/, mysql-<VER>.source/); fall back to the
+# legacy dotted-out name (mysql970 for 9.7.0) if the new one is not present.
+# Set MYSQL_BINARY / MYSQL_SOURCE explicitly in local.mk to override.
+_DEV_VER_COMPACT = $(subst .,,$(DEV_MYSQL_VER))
+ifneq (,$(wildcard ../../mysql-$(DEV_MYSQL_VER)/bin/mysqld))
+  _MYSQL_BINARY_DEFAULT = ../../mysql-$(DEV_MYSQL_VER)
+  _MYSQL_SOURCE_DEFAULT = ../../mysql-$(DEV_MYSQL_VER).source
+else ifneq (,$(wildcard ../../mysql$(_DEV_VER_COMPACT)/bin/mysqld))
+  _MYSQL_BINARY_DEFAULT = ../../mysql$(_DEV_VER_COMPACT)
+  _MYSQL_SOURCE_DEFAULT = ../../mysql$(_DEV_VER_COMPACT).source
+else
+  _MYSQL_BINARY_DEFAULT = ../../mysql-$(DEV_MYSQL_VER)
+  _MYSQL_SOURCE_DEFAULT = ../../mysql-$(DEV_MYSQL_VER).source
+endif
+
+MYSQL_BINARY ?= $(_MYSQL_BINARY_DEFAULT)
+MYSQL_SOURCE ?= $(_MYSQL_SOURCE_DEFAULT)
 BOOST_DIR = $(MYSQL_SOURCE)/extra/boost/boost_1_87_0
 PLUGIN_DIR = $(MYSQL_BINARY)/lib/plugin
 GEOS_DIR = ../../geos
 GEOS_BUILD = $(GEOS_DIR)/build
 
 # libmysqlservices: built from the MySQL source tree, not taken from the binary
-# distribution. The 9.7 binary dist ships libmysqlservices.a compiled with LTO
-# (GCC 14 bytecode), which g++ 13/11 cannot link. The source build (WITH_LTO=OFF)
-# produces a plain-object archive that links with any recent GCC.
-# Build it once with: (cd $(MYSQL_SOURCE)/build && cmake .. -DDOWNLOAD_BOOST=0 -DWITH_CURL=0 && make mysqlservices)
+# distribution. The binary dist ships libmysqlservices.a compiled with LTO
+# (GCC 14 bytecode), which older g++ cannot link. The source build with
+# WITH_LTO=OFF produces a plain-object archive that links with any recent GCC.
+# GenError is required so cmake-generated headers like mysqld_error.h are present.
+# Build it once with:
+#   (cd $(MYSQL_SOURCE)/build && \
+#    cmake .. -DDOWNLOAD_BOOST=0 -DWITH_CURL=0 -DWITH_LTO=OFF && \
+#    make GenError mysqlservices)
 MYSQL_SERVICES_DIR = $(MYSQL_SOURCE)/build/libservices
 
 CXX = g++
