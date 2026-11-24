@@ -8,7 +8,12 @@ RUN dnf install -y --enablerepo=ol9_codeready_builder \
     gcc-toolset-14 gcc-toolset-14-annobin-annocheck gcc-toolset-14-annobin-plugin-gcc \
     cmake make bison perl rpcgen \
     openssl-devel ncurses-devel libtirpc-devel libaio-devel zlib-devel \
+    systemd-devel \
     && dnf clean all
+
+# systemd-devel provides libudev.h: from MySQL 9.7.4 / 26.10.0 on, cmake hard-errors
+# with "-DWITH_AUTHENTICATION_WEBAUTHN=ON, but missing required libraries" when udev
+# headers are absent (earlier versions only warned).
 
 ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH \
     LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64 \
