@@ -8,7 +8,7 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 
 各関数の動作確認状況や既知の制限事項については [CHECKLIST.md](CHECKLIST.md) を参照してください。
 
-## 関数一覧（62関数）
+## 関数一覧（64関数）
 
 ### 空間計測・述語
 
@@ -43,6 +43,8 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 | `STX_MinimumBoundingCircle(geom [, segs])` | 最小外接円（Polygon として返却） |
 | `STX_SquareGrid(size, geom)` | バウンディングボックスを覆う矩形グリッド |
 | `STX_HexGrid(size, geom)` | バウンディングボックスを覆う六角形グリッド |
+| `STX_Buffer(geom, dist [, strategy...])` | バッファ（地理座標でも全ジオメトリ型対応・測地線計算、距離はメートル） |
+| `STX_Buffer_Strategy(name [, value])` | `STX_Buffer` 用ストラテジ値（`ST_Buffer_Strategy` とバイト互換） |
 
 ### 座標変換
 
@@ -107,11 +109,13 @@ MySQL に不足している空間関数を追加するプラグインです。[B
 ## 動作要件
 
 デーモンプラグインは MySQL のバージョン（patch レベルまで）に厳密に紐づくため、
-MySQL 1バージョンにつき専用の `.so` が必要です。対応する MySQL のトラック：
+MySQL 1バージョンにつき専用の `.so` が必要です。プラグインの各リリースでは、
+以下の各トラックの最新版向けバイナリを提供します：
 
-- **LTS**: MySQL 9.7.x（patch リリースごとに新しい `.so` を追加ビルド）
+- **LTS**: MySQL 9.7.x および MySQL 8.4.x（8.4 はプラグイン v0.4.0 から）
 - **Innovation**: 2026年7月から始まる暦ベース版
   （26.7 → 26.10 → 27.1 → …、四半期リリース）
+- それより古い patch 版: その時点で最新だったプラグインリリースのバイナリをご利用ください
 - **MySQL 9.6** サポートはプラグイン **v0.2.0** をもって終了 — 9.6 環境の方は v0.2.0 をご利用ください
 
 ソースからビルドする場合: MySQL ソースツリー（ヘッダ + Boost）、C++17 対応の g++、
@@ -219,7 +223,7 @@ INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-mysql-26.7.0-glibc-2.34.so'
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-全62関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
+全64関数が自動的に登録されます。個別の `CREATE FUNCTION` は不要です。
 
 ```sql
 -- 確認 — spatial_plugin_built_for に .so のビルド対象 MySQL バージョンが表示される
@@ -275,7 +279,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## テスト
 
 ```bash
-make test       # テストスイートを実行（361テスト）
+make test       # テストスイートを実行（462テスト）
 ```
 
 ## ライセンス

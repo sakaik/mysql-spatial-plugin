@@ -63,6 +63,18 @@ inline std::string write_point(uint32_t srid, const GeoPoint &pt) {
   return write_point_wkb(srid, bg::get<0>(pt), bg::get<1>(pt));
 }
 
+// Write an empty GeometryCollection (SRID + WKB with zero sub-geometries).
+// MySQL's ST_Buffer returns GEOMETRYCOLLECTION EMPTY when a negative distance
+// shrinks the input away entirely, so buffer-like functions need this form.
+inline std::string write_geometrycollection_empty(uint32_t srid) {
+  std::string buf;
+  buf.reserve(13);
+  detail::append_uint32(buf, srid);
+  detail::append_wkb_header(buf, GeometryType::GeometryCollection);
+  detail::append_uint32(buf, 0);
+  return buf;
+}
+
 // Write a Cartesian LineString.
 inline std::string write_linestring(uint32_t srid, const Linestring &ls) {
   std::string buf;

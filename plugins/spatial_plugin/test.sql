@@ -2544,6 +2544,260 @@ CALL assert_eq_double('deg2dms: Tokyo lat sec', stx_deg2dms_sec(35.681236), 52.4
 CALL assert_eq_double('dms2deg: Tokyo lat roundtrip', stx_dms2deg(35, 40, 52.4496), 35.681236, 0.000001);
 
 -- =============================================================================
+-- stx_buffer_strategy
+-- =============================================================================
+
+-- Byte-compatible with MySQL's ST_Buffer_Strategy()
+CALL assert_eq_text('buffer_strategy: point_circle == ST_Buffer_Strategy',
+  HEX(stx_buffer_strategy('point_circle', 16)), HEX(ST_Buffer_Strategy('point_circle', 16)));
+CALL assert_eq_text('buffer_strategy: point_square == ST_Buffer_Strategy',
+  HEX(stx_buffer_strategy('point_square')), HEX(ST_Buffer_Strategy('point_square')));
+CALL assert_eq_text('buffer_strategy: join_round == ST_Buffer_Strategy',
+  HEX(stx_buffer_strategy('join_round', 10)), HEX(ST_Buffer_Strategy('join_round', 10)));
+CALL assert_eq_text('buffer_strategy: join_miter == ST_Buffer_Strategy',
+  HEX(stx_buffer_strategy('join_miter', 3.5)), HEX(ST_Buffer_Strategy('join_miter', 3.5)));
+CALL assert_eq_text('buffer_strategy: end_round == ST_Buffer_Strategy',
+  HEX(stx_buffer_strategy('end_round', 8)), HEX(ST_Buffer_Strategy('end_round', 8)));
+CALL assert_eq_text('buffer_strategy: end_flat == ST_Buffer_Strategy',
+  HEX(stx_buffer_strategy('end_flat')), HEX(ST_Buffer_Strategy('end_flat')));
+CALL assert_eq_text('buffer_strategy: name is case-insensitive',
+  HEX(stx_buffer_strategy('END_FLAT')), HEX(ST_Buffer_Strategy('end_flat')));
+CALL assert_eq_int('buffer_strategy: 12 bytes', LENGTH(stx_buffer_strategy('join_miter', 5)), 12);
+CALL assert_eq_text('buffer_strategy: NULL name -> NULL', stx_buffer_strategy(NULL), NULL);
+
+CALL assert_error('buffer_strategy: unknown name -> 1210',
+  'stx_buffer_strategy(''foo'', 1)', 1210);
+CALL assert_error('buffer_strategy: end_flat with value -> 1210',
+  'stx_buffer_strategy(''end_flat'', 1)', 1210);
+CALL assert_error('buffer_strategy: point_circle without value -> 1210',
+  'stx_buffer_strategy(''point_circle'')', 1210);
+CALL assert_error('buffer_strategy: point_circle 0 -> 1210',
+  'stx_buffer_strategy(''point_circle'', 0)', 1210);
+CALL assert_error('buffer_strategy: join_round negative -> 1210',
+  'stx_buffer_strategy(''join_round'', -1)', 1210);
+CALL assert_error('buffer_strategy: end_round > 65536 -> 1210',
+  'stx_buffer_strategy(''end_round'', 65537)', 1210);
+CALL assert_eq_int('buffer_strategy: point_circle 65536 accepted',
+  LENGTH(stx_buffer_strategy('point_circle', 65536)), 12);
+CALL assert_eq_int('buffer_strategy: join_miter > 65536 accepted (not a count)',
+  LENGTH(stx_buffer_strategy('join_miter', 100000)), 12);
+
+-- =============================================================================
+-- stx_buffer: SRID 0 — must match MySQL's ST_Buffer vertex for vertex
+-- =============================================================================
+
+SET @bp   = ST_GeomFromText('POINT(1 2)');
+SET @bmp  = ST_GeomFromText('MULTIPOINT((0 0),(10 0))');
+SET @bl   = ST_GeomFromText('LINESTRING(0 0,10 0,10 10)');
+SET @bml  = ST_GeomFromText('MULTILINESTRING((0 0,10 0),(0 20,10 20))');
+SET @bpg  = ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0),(4 4,4 6,6 6,6 4,4 4))');
+SET @bpgr = ST_GeomFromText('POLYGON((0 0,0 10,10 10,10 0,0 0))');  -- clockwise ring
+SET @bmpg = ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 10,0 10,0 0)),((20 0,30 0,30 10,20 10,20 0)))');
+
+CALL assert_eq_text('buffer srid0: POINT == ST_Buffer',
+  ST_AsText(stx_buffer(@bp, 1)), ST_AsText(ST_Buffer(@bp, 1)));
+CALL assert_eq_text('buffer srid0: MULTIPOINT separate == ST_Buffer',
+  ST_AsText(stx_buffer(@bmp, 2)), ST_AsText(ST_Buffer(@bmp, 2)));
+CALL assert_eq_text('buffer srid0: MULTIPOINT merged == ST_Buffer',
+  ST_AsText(stx_buffer(@bmp, 6)), ST_AsText(ST_Buffer(@bmp, 6)));
+CALL assert_eq_text('buffer srid0: LINESTRING == ST_Buffer',
+  ST_AsText(stx_buffer(@bl, 1)), ST_AsText(ST_Buffer(@bl, 1)));
+CALL assert_eq_text('buffer srid0: MULTILINESTRING == ST_Buffer',
+  ST_AsText(stx_buffer(@bml, 1)), ST_AsText(ST_Buffer(@bml, 1)));
+CALL assert_eq_text('buffer srid0: POLYGON with hole == ST_Buffer',
+  ST_AsText(stx_buffer(@bpg, 0.5)), ST_AsText(ST_Buffer(@bpg, 0.5)));
+CALL assert_eq_text('buffer srid0: POLYGON hole closes == ST_Buffer',
+  ST_AsText(stx_buffer(@bpg, 1.5)), ST_AsText(ST_Buffer(@bpg, 1.5)));
+CALL assert_eq_text('buffer srid0: clockwise POLYGON == ST_Buffer',
+  ST_AsText(stx_buffer(@bpgr, 1)), ST_AsText(ST_Buffer(@bpgr, 1)));
+CALL assert_eq_text('buffer srid0: MULTIPOLYGON == ST_Buffer',
+  ST_AsText(stx_buffer(@bmpg, 1)), ST_AsText(ST_Buffer(@bmpg, 1)));
+CALL assert_eq_text('buffer srid0: POLYGON negative == ST_Buffer',
+  ST_AsText(stx_buffer(@bpg, -0.5)), ST_AsText(ST_Buffer(@bpg, -0.5)));
+CALL assert_eq_text('buffer srid0: MULTIPOLYGON negative == ST_Buffer',
+  ST_AsText(stx_buffer(@bmpg, -2)), ST_AsText(ST_Buffer(@bmpg, -2)));
+
+-- strategies
+CALL assert_eq_text('buffer srid0: point_circle 7 == ST_Buffer',
+  ST_AsText(stx_buffer(@bp, 1, stx_buffer_strategy('point_circle', 7))),
+  ST_AsText(ST_Buffer(@bp, 1, ST_Buffer_Strategy('point_circle', 7))));
+CALL assert_eq_text('buffer srid0: point_square == ST_Buffer',
+  ST_AsText(stx_buffer(@bp, 1, stx_buffer_strategy('point_square'))),
+  ST_AsText(ST_Buffer(@bp, 1, ST_Buffer_Strategy('point_square'))));
+CALL assert_eq_text('buffer srid0: MULTIPOINT point_square == ST_Buffer',
+  ST_AsText(stx_buffer(@bmp, 1, stx_buffer_strategy('point_square'))),
+  ST_AsText(ST_Buffer(@bmp, 1, ST_Buffer_Strategy('point_square'))));
+CALL assert_eq_text('buffer srid0: LINESTRING join_round/end_round 8 == ST_Buffer',
+  ST_AsText(stx_buffer(@bl, 1, stx_buffer_strategy('join_round', 8), stx_buffer_strategy('end_round', 8))),
+  ST_AsText(ST_Buffer(@bl, 1, ST_Buffer_Strategy('join_round', 8), ST_Buffer_Strategy('end_round', 8))));
+CALL assert_eq_text('buffer srid0: LINESTRING join_miter/end_flat == ST_Buffer',
+  ST_AsText(stx_buffer(@bl, 1, stx_buffer_strategy('join_miter', 2), stx_buffer_strategy('end_flat'))),
+  ST_AsText(ST_Buffer(@bl, 1, ST_Buffer_Strategy('join_miter', 2), ST_Buffer_Strategy('end_flat'))));
+CALL assert_eq_text('buffer srid0: LINESTRING end_flat only == ST_Buffer',
+  ST_AsText(stx_buffer(@bl, 1, stx_buffer_strategy('end_flat'))),
+  ST_AsText(ST_Buffer(@bl, 1, ST_Buffer_Strategy('end_flat'))));
+CALL assert_eq_text('buffer srid0: MULTILINESTRING join_miter/end_round 4 == ST_Buffer',
+  ST_AsText(stx_buffer(@bml, 1, stx_buffer_strategy('join_miter', 5), stx_buffer_strategy('end_round', 4))),
+  ST_AsText(ST_Buffer(@bml, 1, ST_Buffer_Strategy('join_miter', 5), ST_Buffer_Strategy('end_round', 4))));
+CALL assert_eq_text('buffer srid0: POLYGON join_miter == ST_Buffer',
+  ST_AsText(stx_buffer(@bpg, 1, stx_buffer_strategy('join_miter', 5))),
+  ST_AsText(ST_Buffer(@bpg, 1, ST_Buffer_Strategy('join_miter', 5))));
+CALL assert_eq_text('buffer srid0: POLYGON join_round 4 == ST_Buffer',
+  ST_AsText(stx_buffer(@bpg, 1, stx_buffer_strategy('join_round', 4))),
+  ST_AsText(ST_Buffer(@bpg, 1, ST_Buffer_Strategy('join_round', 4))));
+CALL assert_eq_text('buffer srid0: strategy order does not matter',
+  ST_AsText(stx_buffer(@bl, 1, stx_buffer_strategy('end_flat'), stx_buffer_strategy('join_miter', 2))),
+  ST_AsText(ST_Buffer(@bl, 1, ST_Buffer_Strategy('join_miter', 2), ST_Buffer_Strategy('end_flat'))));
+CALL assert_eq_text('buffer srid0: accepts ST_Buffer_Strategy() values',
+  ST_AsText(stx_buffer(@bl, 1, ST_Buffer_Strategy('join_miter', 2), ST_Buffer_Strategy('end_flat'))),
+  ST_AsText(ST_Buffer(@bl, 1, ST_Buffer_Strategy('join_miter', 2), ST_Buffer_Strategy('end_flat'))));
+CALL assert_eq_text('buffer srid0: defaults == point_circle 32',
+  ST_AsText(stx_buffer(@bp, 1)), ST_AsText(stx_buffer(@bp, 1, stx_buffer_strategy('point_circle', 32))));
+CALL assert_eq_text('buffer srid0: defaults == join_miter not used (join_round 32)',
+  ST_AsText(stx_buffer(@bl, 1)),
+  ST_AsText(stx_buffer(@bl, 1, stx_buffer_strategy('join_round', 32), stx_buffer_strategy('end_round', 32))));
+
+-- output shape / edge cases
+CALL assert_eq_text('buffer srid0: POINT -> POLYGON', ST_GeometryType(stx_buffer(@bp, 1)), 'POLYGON');
+CALL assert_eq_text('buffer srid0: disjoint parts -> MULTIPOLYGON', ST_GeometryType(stx_buffer(@bmp, 2)), 'MULTIPOLYGON');
+CALL assert_eq_text('buffer srid0: over-shrink -> GEOMETRYCOLLECTION EMPTY',
+  ST_AsText(stx_buffer(@bpg, -6)), 'GEOMETRYCOLLECTION EMPTY');
+CALL assert_eq_text('buffer srid0: over-shrink == ST_Buffer',
+  ST_AsText(stx_buffer(@bpg, -6)), ST_AsText(ST_Buffer(@bpg, -6)));
+CALL assert_eq_text('buffer srid0: distance 0 returns input', ST_AsText(stx_buffer(@bl, 0)), ST_AsText(@bl));
+CALL assert_eq_text('buffer srid0: distance 1e-12 returns input', ST_AsText(stx_buffer(@bp, 1e-12)), 'POINT(1 2)');
+CALL assert_eq_int('buffer srid0: result SRID 0', ST_SRID(stx_buffer(@bp, 1)), 0);
+CALL assert_eq_int('buffer srid0: result is valid', ST_IsValid(stx_buffer(@bpg, 0.5)), 1);
+CALL assert_eq_text('buffer: NULL geom -> NULL', stx_buffer(NULL, 1), NULL);
+CALL assert_eq_text('buffer: NULL distance -> NULL', stx_buffer(@bp, NULL), NULL);
+CALL assert_eq_text('buffer: NULL strategy -> NULL', stx_buffer(@bp, 1, NULL), NULL);
+
+-- =============================================================================
+-- stx_buffer: geographic (metres on the ellipsoid; MySQL supports POINT only)
+-- WKT axis order for 4326/6668 is (lat lon)
+-- =============================================================================
+
+SET @gp   = ST_GeomFromText('POINT(35 139)', 4326);
+SET @gmp  = ST_GeomFromText('MULTIPOINT((35 139),(35 139.1))', 4326);
+SET @gl   = ST_GeomFromText('LINESTRING(35 139,35.1 139)', 4326);
+SET @gml  = ST_GeomFromText('MULTILINESTRING((35 139,35.1 139),(35 139.1,35.1 139.1))', 4326);
+SET @gpg  = ST_GeomFromText('POLYGON((35 139,35 139.01,35.01 139.01,35.01 139,35 139))', 4326);
+SET @gmpg = ST_GeomFromText('MULTIPOLYGON(((35 139,35 139.01,35.01 139.01,35.01 139,35 139)),((35 139.1,35 139.11,35.01 139.11,35.01 139.1,35 139.1)))', 4326);
+
+-- POINT: same algorithm as MySQL (equal up to last-digit rounding)
+CALL assert_eq_double('buffer geo: POINT area == ST_Buffer (4326)',
+  ST_Area(stx_buffer(@gp, 1000)), ST_Area(ST_Buffer(@gp, 1000)), 1.0);
+CALL assert_eq_int('buffer geo: POINT vertex count == ST_Buffer',
+  ST_NumPoints(ST_ExteriorRing(stx_buffer(@gp, 1000))), ST_NumPoints(ST_ExteriorRing(ST_Buffer(@gp, 1000))));
+CALL assert_eq_double('buffer geo: POINT vertex 5 matches ST_Buffer (< 1 mm)',
+  ST_Distance(ST_PointN(ST_ExteriorRing(stx_buffer(@gp, 1000)), 5),
+              ST_PointN(ST_ExteriorRing(ST_Buffer(@gp, 1000)), 5)), 0.0, 0.001);
+-- MySQL rejects strategies for geographic input (ERROR 1210); STX_Buffer accepts them
+CALL assert_error('buffer geo: MySQL ST_Buffer rejects strategy (reference)',
+  'ST_Buffer(ST_GeomFromText(''POINT(35 139)'', 4326), 1000, ST_Buffer_Strategy(''point_circle'', 8))', 1210);
+CALL assert_error('buffer geo: MySQL ST_Buffer rejects LINESTRING (reference)',
+  'ST_Buffer(ST_GeomFromText(''LINESTRING(35 139,35.1 139)'', 4326), 100)', 3618);
+CALL assert_eq_int('buffer geo: result SRID 4326', ST_SRID(stx_buffer(@gp, 1000)), 4326);
+CALL assert_eq_int('buffer geo: result SRID 6668',
+  ST_SRID(stx_buffer(ST_GeomFromText('POINT(35 139)', 6668), 1000)), 6668);
+
+-- POINT r=1000m, 32-gon: area = 16 * sin(2pi/32) * r^2 = 3121445
+CALL assert_eq_double('buffer geo: POINT area (32-gon, r=1000m)',
+  ST_Area(stx_buffer(@gp, 1000)), 3121445.0, 3121.0);
+CALL assert_eq_double('buffer geo: POINT 6668 area ~= 4326',
+  ST_Area(stx_buffer(ST_GeomFromText('POINT(35 139)', 6668), 1000)), ST_Area(stx_buffer(@gp, 1000)), 1.0);
+-- edge midpoint distance = r * cos(pi/32) = 995.18
+CALL assert_eq_double('buffer geo: POINT centre-to-boundary ~= r cos(pi/32)',
+  ST_Distance(@gp, ST_ExteriorRing(stx_buffer(@gp, 1000))), 995.18, 1.0);
+-- point_square: side 2r -> area 4 r^2
+CALL assert_eq_double('buffer geo: POINT point_square area ~= 4r^2',
+  ST_Area(stx_buffer(@gp, 1000, stx_buffer_strategy('point_square'))), 4000000.0, 4000.0);
+CALL assert_eq_int('buffer geo: POINT point_square has 4 corners',
+  ST_NumPoints(ST_ExteriorRing(stx_buffer(@gp, 1000, stx_buffer_strategy('point_square')))), 5);
+CALL assert_eq_int('buffer geo: POINT point_circle 8 has 8 vertices',
+  ST_NumPoints(ST_ExteriorRing(stx_buffer(@gp, 1000, stx_buffer_strategy('point_circle', 8)))), 9);
+
+-- MULTIPOINT: 0.1 deg lon apart (~9.1 km)
+CALL assert_eq_text('buffer geo: MULTIPOINT separate -> MULTIPOLYGON',
+  ST_GeometryType(stx_buffer(@gmp, 1000)), 'MULTIPOLYGON');
+CALL assert_eq_double('buffer geo: MULTIPOINT area = 2 circles',
+  ST_Area(stx_buffer(@gmp, 1000)), 2 * ST_Area(stx_buffer(@gp, 1000)), 100.0);
+CALL assert_eq_text('buffer geo: MULTIPOINT merged -> POLYGON',
+  ST_GeometryType(stx_buffer(@gmp, 6000)), 'POLYGON');
+
+-- LINESTRING: end_flat area ~= 2 * d * length
+CALL assert_eq_double('buffer geo: LINESTRING end_flat area ~= 2 d L',
+  ST_Area(stx_buffer(@gl, 100, stx_buffer_strategy('end_flat'))), 2 * 100 * ST_Length(@gl), 2219.0);
+-- end_round adds a 32-gon (two half circles)
+CALL assert_eq_double('buffer geo: LINESTRING end_round area ~= 2 d L + circle',
+  ST_Area(stx_buffer(@gl, 100)), 2 * 100 * ST_Length(@gl) + 16 * SIN(2 * PI() / 32) * 100 * 100, 2219.0);
+CALL assert_eq_double('buffer geo: LINESTRING midpoint-to-boundary ~= d',
+  ST_Distance(ST_GeomFromText('POINT(35.05 139)', 4326),
+              ST_ExteriorRing(stx_buffer(@gl, 100, stx_buffer_strategy('end_flat')))), 100.0, 0.5);
+CALL assert_eq_double('buffer geo: LINESTRING join_miter/end_flat area',
+  ST_Area(stx_buffer(@gl, 100, stx_buffer_strategy('join_miter', 5), stx_buffer_strategy('end_flat'))),
+  2 * 100 * ST_Length(@gl), 2219.0);
+CALL assert_eq_int('buffer geo: LINESTRING result is valid', ST_IsValid(stx_buffer(@gl, 100)), 1);
+CALL assert_eq_text('buffer geo: MULTILINESTRING separate -> MULTIPOLYGON',
+  ST_GeometryType(stx_buffer(@gml, 100)), 'MULTIPOLYGON');
+CALL assert_eq_double('buffer geo: MULTILINESTRING end_flat area ~= 2 d (L1+L2)',
+  ST_Area(stx_buffer(@gml, 100, stx_buffer_strategy('end_flat'))), 2 * 100 * ST_Length(@gml), 4438.0);
+
+-- POLYGON / MULTIPOLYGON
+CALL assert_eq_int('buffer geo: POLYGON grows', ST_Area(stx_buffer(@gpg, 100)) > ST_Area(@gpg), 1);
+CALL assert_eq_int('buffer geo: POLYGON contains input', ST_Contains(stx_buffer(@gpg, 100), @gpg), 1);
+CALL assert_eq_double('buffer geo: POLYGON corner-to-boundary ~= d',
+  ST_Distance(ST_GeomFromText('POINT(35 139)', 4326), ST_ExteriorRing(stx_buffer(@gpg, 100))), 100.0, 1.0);
+CALL assert_eq_double('buffer geo: POLYGON join_miter area ~= (a+2d)(b+2d)',
+  ST_Area(stx_buffer(@gpg, 100, stx_buffer_strategy('join_miter', 5))),
+  (ST_Distance(ST_GeomFromText('POINT(35 139)', 4326), ST_GeomFromText('POINT(35.01 139)', 4326)) + 200) *
+  (ST_Distance(ST_GeomFromText('POINT(35 139)', 4326), ST_GeomFromText('POINT(35 139.01)', 4326)) + 200), 2000.0);
+CALL assert_eq_int('buffer geo: POLYGON negative shrinks', ST_Area(stx_buffer(@gpg, -100)) < ST_Area(@gpg), 1);
+CALL assert_eq_int('buffer geo: POLYGON negative within input', ST_Within(stx_buffer(@gpg, -100), @gpg), 1);
+CALL assert_eq_text('buffer geo: POLYGON over-shrink -> GEOMETRYCOLLECTION EMPTY',
+  ST_AsText(stx_buffer(@gpg, -1000)), 'GEOMETRYCOLLECTION EMPTY');
+CALL assert_eq_text('buffer geo: MULTIPOLYGON -> MULTIPOLYGON', ST_GeometryType(stx_buffer(@gmpg, 100)), 'MULTIPOLYGON');
+CALL assert_eq_int('buffer geo: MULTIPOLYGON result is valid', ST_IsValid(stx_buffer(@gmpg, 100)), 1);
+CALL assert_eq_text('buffer geo: distance 0 returns input', ST_AsText(stx_buffer(@gpg, 0)), ST_AsText(@gpg));
+
+-- =============================================================================
+-- stx_buffer: errors
+-- =============================================================================
+
+CALL assert_error('buffer: POINT negative distance -> 1210',
+  'stx_buffer(ST_GeomFromText(''POINT(1 2)''), -1)', 1210);
+CALL assert_error('buffer: MULTIPOINT negative distance -> 1210',
+  'stx_buffer(ST_GeomFromText(''MULTIPOINT((0 0),(1 1))''), -1)', 1210);
+CALL assert_error('buffer: LINESTRING negative distance -> 1210',
+  'stx_buffer(ST_GeomFromText(''LINESTRING(0 0,1 1)''), -1)', 1210);
+CALL assert_error('buffer: geo LINESTRING negative distance -> 1210',
+  'stx_buffer(ST_GeomFromText(''LINESTRING(35 139,35.1 139)'', 4326), -1)', 1210);
+CALL assert_error('buffer: POINT with end_flat -> 1210',
+  'stx_buffer(ST_GeomFromText(''POINT(1 2)''), 1, stx_buffer_strategy(''end_flat''))', 1210);
+CALL assert_error('buffer: POINT with join_miter -> 1210',
+  'stx_buffer(ST_GeomFromText(''POINT(1 2)''), 1, stx_buffer_strategy(''join_miter'', 5))', 1210);
+CALL assert_error('buffer: LINESTRING with point_square -> 1210',
+  'stx_buffer(ST_GeomFromText(''LINESTRING(0 0,1 1)''), 1, stx_buffer_strategy(''point_square''))', 1210);
+CALL assert_error('buffer: POLYGON with end_flat -> 1210',
+  'stx_buffer(ST_GeomFromText(''POLYGON((0 0,1 0,1 1,0 0))''), 1, stx_buffer_strategy(''end_flat''))', 1210);
+CALL assert_error('buffer: POLYGON with point_circle -> 1210',
+  'stx_buffer(ST_GeomFromText(''POLYGON((0 0,1 0,1 1,0 0))''), 1, stx_buffer_strategy(''point_circle'', 8))', 1210);
+CALL assert_error('buffer: duplicate join strategy -> 1210',
+  'stx_buffer(ST_GeomFromText(''LINESTRING(0 0,1 1)''), 1, stx_buffer_strategy(''join_round'', 8), stx_buffer_strategy(''join_miter'', 5))', 1210);
+CALL assert_error('buffer: duplicate end strategy -> 1210',
+  'stx_buffer(ST_GeomFromText(''LINESTRING(0 0,1 1)''), 1, stx_buffer_strategy(''end_flat''), stx_buffer_strategy(''end_round'', 8))', 1210);
+CALL assert_error('buffer: invalid strategy bytes -> 1210',
+  'stx_buffer(ST_GeomFromText(''POINT(1 2)''), 1, ''abc'')', 1210);
+CALL assert_error('buffer: unknown strategy id -> 1210',
+  'stx_buffer(ST_GeomFromText(''POINT(1 2)''), 1, UNHEX(''630000000000000000000000''))', 1210);
+CALL assert_error('buffer: point_circle 0 in raw bytes -> 1210',
+  'stx_buffer(ST_GeomFromText(''POINT(1 2)''), 1, UNHEX(''050000000000000000000000''))', 1210);
+CALL assert_error('buffer: GEOMETRYCOLLECTION input -> 3516',
+  'stx_buffer(ST_GeomFromText(''GEOMETRYCOLLECTION(POINT(1 2))''), 1)', 3516);
+CALL assert_error('buffer: geo GEOMETRYCOLLECTION input -> 3516',
+  'stx_buffer(ST_GeomFromText(''GEOMETRYCOLLECTION(POINT(35 139))'', 4326), 1)', 3516);
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 

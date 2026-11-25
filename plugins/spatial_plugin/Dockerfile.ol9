@@ -1,5 +1,7 @@
 FROM oraclelinux:9
 
-RUN dnf install -y gcc gcc-c++ cmake make && dnf clean all
+# openssl-devel: MySQL 8.4's my_sys.h includes sql/stream_cipher.h -> <openssl/evp.h>
+# (headers only; the plugin does not link libssl)
+RUN dnf install -y gcc gcc-c++ cmake make openssl-devel && dnf clean all
 
 WORKDIR /build

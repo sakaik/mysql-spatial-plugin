@@ -71,6 +71,8 @@ Geographic calculations use Vincenty's formulae on the WGS84 ellipsoid.
 | [STX_MinimumBoundingCircle](#stx_minimumboundingcircle) | GEOMETRY | 最小外接円 / Minimum bounding circle |
 | [STX_SquareGrid](#stx_squaregrid) | GEOMETRY | 矩形グリッド生成 / Square grid generation |
 | [STX_HexGrid](#stx_hexgrid) | GEOMETRY | 六角形グリッド生成 / Hexagonal grid generation |
+| [STX_Buffer](#stx_buffer) | GEOMETRY | バッファ（地理座標でも全型対応） / Buffer (all types, incl. geographic) |
+| [STX_Buffer_Strategy](#stx_buffer_strategy) | STRING | STX_Buffer 用ストラテジ値 / Strategy value for STX_Buffer |
 | [STX_MakeValid](#stx_makevalid) | GEOMETRY | 不正ジオメトリ修復 / Repair invalid geometry (GEOS) |
 | [STX_LineMerge](#stx_linemerge) | GEOMETRY | ライン結合 / Merge connected LineStrings (GEOS) |
 | [STX_Voronoi](#stx_voronoi) | GEOMETRY | ボロノイ図 / Voronoi diagram (GEOS) |
@@ -1850,6 +1852,134 @@ SELECT ST_GeometryType(STX_HexGrid(5,
 
 ---
 
+### STX_Buffer
+
+ジオメトリから指定距離の範囲（バッファ）をポリゴンとして返す。MySQL 標準の `ST_Buffer()` と同じ引数・同じストラテジ指定方式を持ち、さらに **地理座標系（4326、6668 等）でも全ジオメトリ型** に対応する。
+Returns a polygon covering all points within the given distance of the geometry. Takes the same arguments and strategy values as MySQL's `ST_Buffer()`, and additionally supports **all geometry types on geographic SRSs** (4326, 6668, etc.).
+
+```sql
+STX_Buffer(geometry, distance [, strategy1 [, strategy2 [, strategy3]]]) -> GEOMETRY
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| geometry | GEOMETRY | POINT / MULTIPOINT / LINESTRING / MULTILINESTRING / POLYGON / MULTIPOLYGON |
+| distance | DOUBLE | バッファ距離。Cartesian は座標単位、Geographic はメートル。負の値は POLYGON / MULTIPOLYGON のみ可（縮小）/ Buffer distance. Coordinate units for Cartesian, metres for Geographic. Negative values (shrink) allowed only for POLYGON / MULTIPOLYGON |
+| strategy1〜3 | BINARY(12) | `STX_Buffer_Strategy()` または MySQL 標準 `ST_Buffer_Strategy()` の戻り値（省略可、順不同）/ Value from `STX_Buffer_Strategy()` or MySQL's `ST_Buffer_Strategy()` (optional, any order) |
+
+#### ストラテジ (Strategies)
+
+| カテゴリ (Category) | ストラテジ (Strategy) | 適用対象 (Applies to) | デフォルト (Default) |
+|---|---|---|---|
+| point | `point_circle` (n) / `point_square` | POINT, MULTIPOINT | `point_circle` 32 |
+| join | `join_round` (n) / `join_miter` (limit) | LINESTRING, MULTILINESTRING, POLYGON, MULTIPOLYGON | `join_round` 32 |
+| end | `end_round` (n) / `end_flat` | LINESTRING, MULTILINESTRING | `end_round` 32 |
+
+- n = 円周あたりの点数 (1〜65536) / points per full circle (1–65536)。`join_miter` の limit（デフォルト 5.0）は正の実数 / positive real (default 5.0)
+- 適用規則は MySQL 標準と同じ。対象外のストラテジ（例: POINT に `end_flat`）や同カテゴリの重複指定は ERROR 1210
+  Same rules as MySQL: a strategy that does not apply to the geometry (e.g. `end_flat` on a POINT) or two strategies of the same category raise ERROR 1210
+
+#### 使用例 (Examples)
+
+```sql
+-- SRID 0: ST_Buffer() と頂点単位で同一の結果 / Vertex-for-vertex identical to ST_Buffer()
+SELECT ST_AsText(STX_Buffer(ST_GeomFromText('POINT(0 0)'), 1,
+  STX_Buffer_Strategy('point_square')));
+-- POLYGON((-1 -1,1 -1,1 1,-1 1,-1 -1))
+
+SELECT ST_AsText(STX_Buffer(ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))'), 1,
+  STX_Buffer_Strategy('join_miter', 5)));
+-- POLYGON((-1 0,-1 -1,0 -1,10 -1,11 -1,11 0,11 10,11 11,10 11,0 11,-1 11,-1 10,-1 0))
+
+-- 地理座標: 東京駅から半径 1km（面積 m²）/ Geographic: 1 km around Tokyo Station (area in m²)
+SELECT ROUND(ST_Area(STX_Buffer(ST_GeomFromText('POINT(35.6812 139.7671)', 4326), 1000)));
+-- 3121449   (32-gon inscribed in a 1000 m circle)
+
+-- 地理座標の LINESTRING（MySQL 標準では ERROR 3618）、両端フラット・幅 50m
+-- Geographic LINESTRING (ERROR 3618 in MySQL), flat ends, 50 m each side
+SELECT ROUND(ST_Area(STX_Buffer(
+  ST_GeomFromText('LINESTRING(35.6812 139.7671, 35.6896 139.7006)', 4326), 50,
+  STX_Buffer_Strategy('end_flat'))));
+-- 609134   (≈ 2 × 50 m × 6091.3 m)
+
+-- MySQL 標準の ST_Buffer_Strategy() の値もそのまま使える / ST_Buffer_Strategy() values work as-is
+SELECT ST_AsText(STX_Buffer(ST_GeomFromText('POINT(0 0)'), 1,
+  ST_Buffer_Strategy('point_circle', 4)));
+
+-- 縮小しきると空 / Shrinking away everything returns an empty collection
+SELECT ST_AsText(STX_Buffer(ST_GeomFromText('POLYGON((0 0,10 0,10 10,0 10,0 0))'), -6));
+-- GEOMETRYCOLLECTION EMPTY
+```
+
+#### MySQL 標準 ST_Buffer() との違い (Differences from MySQL's ST_Buffer())
+
+| | MySQL `ST_Buffer()` | `STX_Buffer()` |
+|---|---|---|
+| SRID 0 / Cartesian | 全型対応 / all types | 全型対応、結果は同一 / all types, identical result |
+| Geographic POINT | 対応（ストラテジ指定不可、ERROR 1210）/ supported, no strategies | 対応、ストラテジ指定可 / supported, strategies allowed |
+| Geographic LINESTRING / POLYGON / MULTI* | ERROR 3618 | 対応 / supported |
+| GEOMETRYCOLLECTION | 対応 / supported | **非対応 (ERROR 3516)** / **not supported** |
+
+#### 備考 (Notes)
+
+- Geographic では楕円体上の測地線計算でバッファを生成する（平面近似ではない）。距離はメートル。
+  Geographic buffers are computed geodesically on the ellipsoid (no planar approximation). Distance is in metres.
+- 出力: 1 パーツ = POLYGON、複数パーツ = MULTIPOLYGON、負の距離で消滅した場合 = GEOMETRYCOLLECTION EMPTY。外周リングは反時計回り（MySQL と同じ）。
+  Output: one part = POLYGON, several = MULTIPOLYGON, fully eroded = GEOMETRYCOLLECTION EMPTY. Exterior rings are counter-clockwise (same as MySQL).
+- `|distance| <= 1e-11` の場合は入力ジオメトリをそのまま返す（MySQL と同じ）。NaN / Inf は ERROR 1210。
+  If `|distance| <= 1e-11` the input is returned unchanged (same as MySQL). NaN / Inf raise ERROR 1210.
+- **制限事項: GEOMETRYCOLLECTION 入力は非対応**（ERROR 3516）。必要なら要素ごとに `STX_Buffer()` して `ST_Union()` する。
+  **Limitation: GEOMETRYCOLLECTION input is not supported** (ERROR 3516). Buffer each element and combine with `ST_Union()` if needed.
+- Geographic のバッファは Cartesian の約 10〜20 倍の計算コスト（実測例: POINT 48 µs、20 頂点 LINESTRING 468 µs、2000 頂点 LINESTRING 86 ms）。
+  Geographic buffers cost roughly 10–20× the Cartesian ones (measured: POINT 48 µs, 20-vertex LINESTRING 468 µs, 2000-vertex LINESTRING 86 ms).
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: `ST_Buffer()`（geography 型は内部で平面投影して近似 / approximated via planar projection for geography）
+- MySQL 標準: `ST_Buffer()`（Geographic は POINT のみ / POINT only on geographic SRSs）
+
+---
+
+### STX_Buffer_Strategy
+
+`STX_Buffer()` に渡すストラテジ値（12 バイトのバイナリ）を生成する。MySQL 標準の `ST_Buffer_Strategy()` とバイト単位で互換。
+Returns a 12-byte strategy value for `STX_Buffer()`. Byte-compatible with MySQL's `ST_Buffer_Strategy()`.
+
+```sql
+STX_Buffer_Strategy(name [, value]) -> BINARY(12)
+```
+
+#### 引数 (Arguments)
+
+| 引数 (Arg) | 型 (Type) | 説明 (Description) |
+|---|---|---|
+| name | STRING | `point_circle` / `point_square` / `join_round` / `join_miter` / `end_round` / `end_flat`（大文字小文字は区別しない / case-insensitive） |
+| value | DOUBLE | `point_circle` / `join_round` / `end_round`: 円周あたりの点数 (0 < n <= 65536)、`join_miter`: マイター制限 (> 0)。`point_square` / `end_flat` では指定不可 / Points per circle, or the miter limit; not allowed for `point_square` / `end_flat` |
+
+#### 使用例 (Examples)
+
+```sql
+SELECT HEX(STX_Buffer_Strategy('join_miter', 5));
+-- 040000000000000000001440
+
+SELECT HEX(STX_Buffer_Strategy('end_flat')) = HEX(ST_Buffer_Strategy('end_flat'));
+-- 1
+```
+
+#### 備考 (Notes)
+
+- 不明な名前、値の有無の誤り、範囲外の値は ERROR 1210。
+  Unknown names, a missing or superfluous value, or an out-of-range value raise ERROR 1210.
+
+#### 対応する他の関数 (Equivalent in Other Systems)
+
+- PostGIS: なし（`ST_Buffer()` の文字列パラメータで指定 / given as a text parameter of `ST_Buffer()`）
+- MySQL 標準: `ST_Buffer_Strategy()`
+
+---
+
 ## GEOS-based Functions / GEOS ベース関数
 
 以下の関数は [GEOS](https://libgeos.org/) ライブラリ（静的リンク）を使用して実装されている。
@@ -2607,8 +2737,8 @@ SELECT ST_Area(STX_Concavehullofpolygons(ST_GeomFromText(
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-`INSTALL PLUGIN` を実行すると全51関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
-All 51 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
+`INSTALL PLUGIN` を実行すると全64関数が自動的に登録される。個別の `CREATE FUNCTION` は不要。
+All 64 functions are automatically registered upon `INSTALL PLUGIN`. No separate `CREATE FUNCTION` statements are needed.
 
 ### 登録済み関数の確認 (Verifying Registered Functions)
 
@@ -2682,6 +2812,8 @@ ORDER BY UDF_NAME;
 | STX_Points                     | char            |
 | STX_Isring                     | integer         |
 | STX_ShortestLine               | char            |
+| STX_Buffer                     | char            |
+| STX_Buffer_Strategy            | char            |
 | STX_dms2deg                    | double          |
 | STX_deg2dms_deg                | integer         |
 | STX_deg2dms_min                | integer         |

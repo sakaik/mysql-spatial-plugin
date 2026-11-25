@@ -8,7 +8,7 @@ Provides GIS functions missing from MySQL, including distance-based queries, spa
 
 For testing status and known limitations of each function, see [CHECKLIST.md](CHECKLIST.md).
 
-## Functions (62)
+## Functions (64)
 
 ### Spatial Measurement & Predicates
 
@@ -43,6 +43,8 @@ For testing status and known limitations of each function, see [CHECKLIST.md](CH
 | `STX_MinimumBoundingCircle(geom [, segs])` | Minimum bounding circle as polygon |
 | `STX_SquareGrid(size, geom)` | Square grid covering bounding box |
 | `STX_HexGrid(size, geom)` | Hexagonal grid covering bounding box |
+| `STX_Buffer(geom, dist [, strategy...])` | Buffer for all geometry types, including geographic (geodesic, metres) |
+| `STX_Buffer_Strategy(name [, value])` | Strategy value for `STX_Buffer` (byte-compatible with `ST_Buffer_Strategy`) |
 
 ### Coordinate Transformations
 
@@ -107,11 +109,13 @@ See [Function Reference](plugins/spatial_plugin/docs/function_reference.md) for 
 ## Requirements
 
 Daemon plugins are tied to the exact MySQL version (patch level included), so
-each MySQL version needs its own `.so`. Supported MySQL tracks:
+each MySQL version needs its own `.so`. Each plugin release ships binaries for
+the latest version of each supported track:
 
-- **LTS**: MySQL 9.7.x (a new `.so` is built for each patch release)
+- **LTS**: MySQL 9.7.x and MySQL 8.4.x (from plugin v0.4.0)
 - **Innovation**: calendar-versioned releases starting July 2026
   (26.7 → 26.10 → 27.1 → …, quarterly)
+- Older patch releases: use the binaries from the plugin release that was current at the time
 - **MySQL 9.6** support ended with plugin **v0.2.0** — 9.6 users should stay on that release
 
 For building from source: MySQL source tree (headers + Boost), g++ with C++17
@@ -220,7 +224,7 @@ INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin-mysql-26.7.0-glibc-2.34.so'
 INSTALL PLUGIN spatial_plugin SONAME 'spatial_plugin.so';
 ```
 
-All 62 functions are registered automatically. No `CREATE FUNCTION` needed.
+All 64 functions are registered automatically. No `CREATE FUNCTION` needed.
 
 ```sql
 -- Verify — spatial_plugin_built_for shows the exact MySQL version the .so was compiled against
@@ -276,7 +280,7 @@ SELECT ST_AsText(STX_Translate(ST_GeomFromText('POINT(1 2)'), 10, 20));
 ## Tests
 
 ```bash
-make test       # Run test suite (361 tests)
+make test       # Run test suite (462 tests)
 ```
 
 ## License

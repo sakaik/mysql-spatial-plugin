@@ -21,6 +21,8 @@
 #include "plugin_version.h"
 
 #include <boost/geometry/algorithms/area.hpp>
+#include <boost/geometry/algorithms/buffer.hpp>
+#include <boost/geometry/algorithms/correct.hpp>
 #include <boost/geometry/algorithms/covered_by.hpp>
 #include <boost/geometry/algorithms/distance.hpp>
 #include <boost/geometry/algorithms/equals.hpp>
@@ -37,6 +39,27 @@
 #include <boost/geometry/formulas/vincenty_direct.hpp>
 #include <boost/geometry/formulas/vincenty_inverse.hpp>
 #include <boost/geometry/srs/spheroid.hpp>
+
+// Buffer strategies. The cartesian set is complete; boost 1.87 ships geographic
+// variants of everything except point_square and end_flat (end_flat only emits
+// the perpendicular points the side strategy already produced, so it is
+// coordinate-system agnostic and gets reused; point_square is implemented
+// below as geographic_point_square).
+#include <boost/geometry/strategies/agnostic/buffer_distance_symmetric.hpp>
+#include <boost/geometry/strategies/cartesian/buffer_end_flat.hpp>
+#include <boost/geometry/strategies/cartesian/buffer_end_round.hpp>
+#include <boost/geometry/strategies/cartesian/buffer_join_miter.hpp>
+#include <boost/geometry/strategies/cartesian/buffer_join_round.hpp>
+#include <boost/geometry/strategies/cartesian/buffer_point_circle.hpp>
+#include <boost/geometry/strategies/cartesian/buffer_point_square.hpp>
+#include <boost/geometry/strategies/cartesian/buffer_side_straight.hpp>
+#include <boost/geometry/strategies/geographic/buffer_end_round.hpp>
+#include <boost/geometry/strategies/geographic/buffer_helper.hpp>
+#include <boost/geometry/strategies/geographic/buffer_join_miter.hpp>
+#include <boost/geometry/strategies/geographic/buffer_join_round.hpp>
+#include <boost/geometry/strategies/geographic/buffer_point_circle.hpp>
+#include <boost/geometry/strategies/geographic/buffer_side_straight.hpp>
+#include <boost/geometry/util/select_calculation_type.hpp>
 
 #include "gis_lib/geometry_types.h"
 #include "gis_lib/wkb_parser.h"
@@ -66,6 +89,16 @@ static SERVICE_TYPE(mysql_udf_metadata) *udf_metadata_svc = nullptr;
 static void set_result_charset_utf8(UDF_INIT *initid) {
   if (udf_metadata_svc) {
     const char *charset = "utf8mb4";
+    udf_metadata_svc->result_set(initid, "charset",
+                                  static_cast<void *>(const_cast<char *>(charset)));
+  }
+}
+
+// Set UDF result charset to binary (for UDFs returning packed bytes rather
+// than text, e.g. stx_buffer_strategy).
+static void set_result_charset_binary(UDF_INIT *initid) {
+  if (udf_metadata_svc) {
+    const char *charset = "binary";
     udf_metadata_svc->result_set(initid, "charset",
                                   static_cast<void *>(const_cast<char *>(charset)));
   }
@@ -4775,6 +4808,466 @@ static double stx_deg2dms_sec(UDF_INIT * /*initid*/, UDF_ARGS *args,
 
 static void stx_deg2dms_sec_deinit(UDF_INIT * /*initid*/) {}
 
+}  // extern "C" (pause for buffer strategy templates)
+
+// ===== STX_Buffer helpers ====================================================
+// MySQL's ST_Buffer only implements geographic buffers for POINT, and refuses
+// strategy arguments there altogether. These helpers lift both limits: every
+// geometry type is buffered, with the full strategy set, and for geographic
+// SRIDs the distance is in metres computed on the spheroid (no planar
+// approximation).
+
+namespace bb = bg::strategy::buffer;
+
+// Geographic point_square. boost ships geographic_point_circle but no square
+// variant, and the cartesian one adds the distance straight to the coordinates
+// — which treats metres as degrees. Build the four corners geodesically
+// instead: they sit at distance * sqrt(2) along the 45-degree azimuths.
+template <typename FormulaPolicy = bg::strategy::andoyer,
+          typename Spheroid = bg::srs::spheroid<double>,
+          typename CalculationType = void>
+class geographic_point_square {
+ public:
+  geographic_point_square() = default;
+  explicit geographic_point_square(Spheroid const &spheroid)
+      : m_spheroid(spheroid) {}
+
+  template <typename Point, typename DistanceStrategy, typename RangeOut>
+  inline void apply(Point const &point,
+                    DistanceStrategy const &distance_strategy,
+                    RangeOut &range_out) const {
+    using calc_t = typename bg::select_calculation_type<
+        Point, typename boost::range_value<RangeOut>::type,
+        CalculationType>::type;
+    using helper =
+        bb::geographic_buffer_helper<FormulaPolicy, calc_t>;
+
+    calc_t const lon_rad = bg::get_as_radian<0>(point);
+    calc_t const lat_rad = bg::get_as_radian<1>(point);
+    calc_t const distance =
+        distance_strategy.apply(point, point, bb::buffer_side_left);
+    calc_t const diagonal = distance * std::sqrt(calc_t(2));
+    calc_t const pi = bg::math::pi<calc_t>();
+
+    // Corner order matches the cartesian point_square: SW, NW, NE, SE.
+    calc_t const azimuths[4] = {-3 * pi / 4, -pi / 4, pi / 4, 3 * pi / 4};
+    for (calc_t azimuth : azimuths)
+      helper::append_point(lon_rad, lat_rad, diagonal, azimuth, m_spheroid,
+                           range_out);
+
+    range_out.push_back(range_out.front());
+  }
+
+ private:
+  Spheroid m_spheroid;
+};
+
+// The strategy objects to use per coordinate system.
+struct CartesianBufferStrategies {
+  using side = bb::side_straight;
+  using point_circle = bb::point_circle;
+  using point_square = bb::point_square;
+  using join_round = bb::join_round;
+  using join_miter = bb::join_miter;
+  using end_round = bb::end_round;
+  using end_flat = bb::end_flat;
+};
+
+struct GeographicBufferStrategies {
+  using side = bb::geographic_side_straight<>;
+  using point_circle = bb::geographic_point_circle<>;
+  using point_square = ::geographic_point_square<>;
+  using join_round = bb::geographic_join_round<>;
+  using join_miter = bb::geographic_join_miter<>;
+  using end_round = bb::geographic_end_round<>;
+  using end_flat = bb::end_flat;  // coordinate-system agnostic
+};
+
+// Strategy ids as encoded by MySQL's ST_Buffer_Strategy() (sql/gis/
+// buffer_strategies.h). STX_Buffer_Strategy() emits the same layout, so values
+// from either function can be passed to STX_Buffer().
+enum BufferStrategyId : uint32_t {
+  kStratEndRound = 1,
+  kStratEndFlat = 2,
+  kStratJoinRound = 3,
+  kStratJoinMiter = 4,
+  kStratPointCircle = 5,
+  kStratPointSquare = 6,
+};
+
+// Strategy value is a {uint32 id, double value} pair, little-endian.
+static constexpr unsigned long BUFFER_STRATEGY_LENGTH = 12;
+// Mirrors the default of MySQL's max_points_in_geometry.
+static constexpr double MAX_POINTS_PER_CIRCLE = 65536.0;
+// Same threshold MySQL uses to short-circuit to the input geometry (GIS_ZERO).
+static constexpr double BUFFER_ZERO = 0.00000000001;
+
+struct BufferStrategySet {
+  std::size_t point_circle_value = 32;
+  std::size_t join_round_value = 32;
+  std::size_t end_round_value = 32;
+  double join_miter_value = 5.0;
+
+  bool point_is_set = false;
+  bool join_is_set = false;
+  bool end_is_set = false;
+
+  bool point_square = false;
+  bool join_miter = false;
+  bool end_flat = false;
+};
+
+// Encode one strategy value. Returns false if the name is unknown.
+static bool encode_buffer_strategy(const char *name, double value,
+                                   std::string &out) {
+  uint32_t id = 0;
+  if (!strcasecmp(name, "end_round")) id = kStratEndRound;
+  else if (!strcasecmp(name, "end_flat")) id = kStratEndFlat;
+  else if (!strcasecmp(name, "join_round")) id = kStratJoinRound;
+  else if (!strcasecmp(name, "join_miter")) id = kStratJoinMiter;
+  else if (!strcasecmp(name, "point_circle")) id = kStratPointCircle;
+  else if (!strcasecmp(name, "point_square")) id = kStratPointSquare;
+  else return false;
+
+  out.clear();
+  out.append(reinterpret_cast<const char *>(&id), 4);
+  out.append(reinterpret_cast<const char *>(&value), 8);
+  return true;
+}
+
+// True if the strategy takes no value argument.
+static bool buffer_strategy_is_valueless(const char *name) {
+  return !strcasecmp(name, "end_flat") || !strcasecmp(name, "point_square");
+}
+
+// Decode one strategy value into the set. Returns true on error (unknown id,
+// out-of-range value, or a second strategy of the same category).
+static bool decode_buffer_strategy(const char *data, unsigned long length,
+                                   BufferStrategySet &s) {
+  if (data == nullptr || length < BUFFER_STRATEGY_LENGTH) return true;
+
+  uint32_t id;
+  double value;
+  std::memcpy(&id, data, 4);
+  std::memcpy(&value, data + 4, 8);
+
+  const bool counted = (id == kStratEndRound || id == kStratJoinRound ||
+                        id == kStratPointCircle);
+  if (counted && (!(value > 0) || value > MAX_POINTS_PER_CIRCLE)) return true;
+  if (id == kStratJoinMiter && !(value > 0)) return true;
+
+  switch (id) {
+    case kStratEndRound:
+      if (s.end_is_set) return true;
+      s.end_is_set = true;
+      s.end_round_value = static_cast<std::size_t>(value);
+      return false;
+    case kStratEndFlat:
+      if (s.end_is_set) return true;
+      s.end_is_set = true;
+      s.end_flat = true;
+      return false;
+    case kStratJoinRound:
+      if (s.join_is_set) return true;
+      s.join_is_set = true;
+      s.join_round_value = static_cast<std::size_t>(value);
+      return false;
+    case kStratJoinMiter:
+      if (s.join_is_set) return true;
+      s.join_is_set = true;
+      s.join_miter = true;
+      s.join_miter_value = value;
+      return false;
+    case kStratPointCircle:
+      if (s.point_is_set) return true;
+      s.point_is_set = true;
+      s.point_circle_value = static_cast<std::size_t>(value);
+      return false;
+    case kStratPointSquare:
+      if (s.point_is_set) return true;
+      s.point_is_set = true;
+      s.point_square = true;
+      return false;
+    default:
+      return true;
+  }
+}
+
+// Only the strategies that apply to the geometry's dimension are instantiated,
+// which keeps the number of bg::buffer instantiations down: 2 combinations for
+// puntal input, 4 for linear, 2 for areal.
+template <typename Strategies, typename Geom, typename MultiPolygonT>
+static void run_buffer(const Geom &geom, MultiPolygonT &out, double distance,
+                       const BufferStrategySet &s) {
+  using tag = typename bg::tag<Geom>::type;
+  constexpr bool puntal = std::is_same_v<tag, bg::point_tag> ||
+                          std::is_same_v<tag, bg::multi_point_tag>;
+  constexpr bool linear = std::is_same_v<tag, bg::linestring_tag> ||
+                          std::is_same_v<tag, bg::multi_linestring_tag>;
+
+  bb::distance_symmetric<double> dist(distance);
+  typename Strategies::side side;
+
+  if constexpr (puntal) {
+    typename Strategies::join_round join(s.join_round_value);
+    typename Strategies::end_round end(s.end_round_value);
+    if (s.point_square)
+      bg::buffer(geom, out, dist, side, join, end,
+                 typename Strategies::point_square());
+    else
+      bg::buffer(geom, out, dist, side, join, end,
+                 typename Strategies::point_circle(s.point_circle_value));
+  } else if constexpr (linear) {
+    typename Strategies::point_circle point(s.point_circle_value);
+    if (s.join_miter) {
+      typename Strategies::join_miter join(s.join_miter_value);
+      if (s.end_flat)
+        bg::buffer(geom, out, dist, side, join,
+                   typename Strategies::end_flat(), point);
+      else
+        bg::buffer(geom, out, dist, side, join,
+                   typename Strategies::end_round(s.end_round_value), point);
+    } else {
+      typename Strategies::join_round join(s.join_round_value);
+      if (s.end_flat)
+        bg::buffer(geom, out, dist, side, join,
+                   typename Strategies::end_flat(), point);
+      else
+        bg::buffer(geom, out, dist, side, join,
+                   typename Strategies::end_round(s.end_round_value), point);
+    }
+  } else {
+    typename Strategies::point_circle point(s.point_circle_value);
+    typename Strategies::end_round end(s.end_round_value);
+    if (s.join_miter)
+      bg::buffer(geom, out, dist, side,
+                 typename Strategies::join_miter(s.join_miter_value), end,
+                 point);
+    else
+      bg::buffer(geom, out, dist, side,
+                 typename Strategies::join_round(s.join_round_value), end,
+                 point);
+  }
+}
+
+// Which strategy categories a geometry accepts, mirroring MySQL's rules in
+// sql/gis/buffer.cc: puntal input rejects join/end, linear rejects point, areal
+// rejects point/end, and only areal input accepts a negative distance.
+enum class BufferDimension { kPuntal, kLinear, kAreal };
+
+static BufferDimension buffer_dimension(GeometryType t) {
+  switch (t) {
+    case GeometryType::Point:
+    case GeometryType::MultiPoint:
+      return BufferDimension::kPuntal;
+    case GeometryType::LineString:
+    case GeometryType::MultiLineString:
+      return BufferDimension::kLinear;
+    default:
+      return BufferDimension::kAreal;
+  }
+}
+
+static bool buffer_strategies_apply(BufferDimension dim,
+                                    const BufferStrategySet &s,
+                                    double distance) {
+  switch (dim) {
+    case BufferDimension::kPuntal:
+      return !(s.end_is_set || s.join_is_set || distance < 0);
+    case BufferDimension::kLinear:
+      return !(s.point_is_set || distance < 0);
+    case BufferDimension::kAreal:
+      return !(s.point_is_set || s.end_is_set);
+  }
+  return false;
+}
+
+// Buffer a parsed geometry and serialise the result the way MySQL does:
+// POLYGON for a single part, MULTIPOLYGON for several, and
+// GEOMETRYCOLLECTION EMPTY when a negative distance consumed everything.
+template <typename Strategies, typename Variant>
+static std::string buffer_variant(const Variant &v, uint32_t srid,
+                                  double distance,
+                                  const BufferStrategySet &s) {
+  return std::visit(
+      [&](const auto &g) -> std::string {
+        using G = std::decay_t<decltype(g)>;
+        using MultiPolygonT =
+            std::conditional_t<std::is_same_v<Variant, GeographicVariant>,
+                               GeoMultiPolygon, MultiPolygon>;
+        // boost's default ring orientation is clockwise; MySQL WKB rings are
+        // not normalised, and bg::buffer silently returns nothing for a
+        // reversed ring, so correct() first.
+        G geom = g;
+        bg::correct(geom);
+
+        MultiPolygonT out;
+        run_buffer<Strategies>(geom, out, distance, s);
+        // bg::buffer emits clockwise exterior rings; MySQL's ST_Buffer emits
+        // counter-clockwise ones (OGC convention). Reverse every ring so the
+        // output is vertex-for-vertex identical to ST_Buffer.
+        for (auto &poly : out) bg::reverse(poly);
+
+        if (out.empty()) return write_geometrycollection_empty(srid);
+        if (out.size() == 1) return write_polygon(srid, out[0]);
+        return write_multi_polygon(srid, out);
+      },
+      v);
+}
+
+extern "C" {  // resume extern "C" for the buffer UDFs
+
+// ----- stx_buffer_strategy ---------------------------------------------------
+// stx_buffer_strategy(name [, value]) -> 12-byte strategy value.
+// Byte-compatible with MySQL's ST_Buffer_Strategy(), so either function's
+// output can be fed to STX_Buffer().
+
+static bool stx_buffer_strategy_init(UDF_INIT *initid, UDF_ARGS *args,
+                                     char *msg) {
+  if (args->arg_count < 1 || args->arg_count > 2) {
+    strcpy(msg,
+           "stx_buffer_strategy() requires 1 or 2 arguments (name [, value])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  if (args->arg_count == 2) args->arg_type[1] = REAL_RESULT;
+  initid->maybe_null = 1;
+  initid->max_length = BUFFER_STRATEGY_LENGTH;
+  initid->ptr = nullptr;
+  set_result_charset_binary(initid);
+  return false;
+}
+
+static char *stx_buffer_strategy(UDF_INIT *initid, UDF_ARGS *args,
+                                 char *result, unsigned long *length,
+                                 char *is_null, char *error) {
+  if (!args->args[0]) { *is_null = 1; return nullptr; }
+
+  std::string name(args->args[0], args->lengths[0]);
+  const bool valueless = buffer_strategy_is_valueless(name.c_str());
+
+  // end_flat and point_square take no value; the others require one.
+  if (valueless ? args->arg_count != 1 : args->arg_count != 2) {
+    my_error(ER_WRONG_ARGUMENTS, MYF(0), "stx_buffer_strategy");
+    *error = 1;
+    return nullptr;
+  }
+
+  double value = 0.0;
+  if (!valueless) {
+    if (!args->args[1]) { *is_null = 1; return nullptr; }
+    value = *reinterpret_cast<double *>(args->args[1]);
+    const bool counted = strcasecmp(name.c_str(), "join_miter") != 0;
+    if (!(value > 0) || (counted && value > MAX_POINTS_PER_CIRCLE)) {
+      my_error(ER_WRONG_ARGUMENTS, MYF(0), "stx_buffer_strategy");
+      *error = 1;
+      return nullptr;
+    }
+  }
+
+  std::string encoded;
+  if (!encode_buffer_strategy(name.c_str(), value, encoded)) {
+    my_error(ER_WRONG_ARGUMENTS, MYF(0), "stx_buffer_strategy");
+    *error = 1;
+    return nullptr;
+  }
+
+  *length = static_cast<unsigned long>(encoded.size());
+  std::memcpy(result, encoded.data(), encoded.size());
+  return result;
+}
+
+static void stx_buffer_strategy_deinit(UDF_INIT *) {}
+
+// ----- stx_buffer ------------------------------------------------------------
+// stx_buffer(geom, distance [, strategy1 [, strategy2 [, strategy3]]])
+// Distance is in SRS units for SRID 0 and in metres for geographic SRIDs,
+// where the buffer is computed on the spheroid.
+
+static bool stx_buffer_init(UDF_INIT *initid, UDF_ARGS *args, char *msg) {
+  if (args->arg_count < 2 || args->arg_count > 5) {
+    strcpy(msg,
+           "stx_buffer() requires 2 to 5 arguments "
+           "(geom, distance [, strategy1 [, strategy2 [, strategy3]]])");
+    return true;
+  }
+  args->arg_type[0] = STRING_RESULT;
+  args->arg_type[1] = REAL_RESULT;
+  for (unsigned i = 2; i < args->arg_count; ++i)
+    args->arg_type[i] = STRING_RESULT;
+  initid->maybe_null = 1;
+  initid->ptr = nullptr;
+  return false;
+}
+
+static char *stx_buffer(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                        unsigned long *length, char *is_null, char *error) {
+  if (initid->ptr) { free(initid->ptr); initid->ptr = nullptr; }
+  for (unsigned i = 0; i < args->arg_count; ++i)
+    if (!args->args[i]) { *is_null = 1; return nullptr; }
+
+  const double distance = *reinterpret_cast<double *>(args->args[1]);
+  if (std::isnan(distance) || std::isinf(distance)) {
+    my_error(ER_WRONG_ARGUMENTS, MYF(0), "stx_buffer");
+    *error = 1;
+    return nullptr;
+  }
+
+  // Same short-circuit as MySQL: a distance this small returns the input,
+  // avoiding division overflow inside the buffer algorithm.
+  if (std::abs(distance) <= BUFFER_ZERO) {
+    std::string copy(args->args[0], args->lengths[0]);
+    return return_wkb(initid, copy, result, length);
+  }
+
+  BufferStrategySet strategies;
+  for (unsigned i = 2; i < args->arg_count; ++i) {
+    if (decode_buffer_strategy(args->args[i], args->lengths[i], strategies)) {
+      my_error(ER_WRONG_ARGUMENTS, MYF(0), "stx_buffer");
+      *error = 1;
+      return nullptr;
+    }
+  }
+
+  auto r = parse_geometry(args->args[0], args->lengths[0]);
+  if (!r) {
+    // The WKB parser has no GEOMETRYCOLLECTION support yet, so say so rather
+    // than reporting a generic parse failure.
+    my_error(ER_UNEXPECTED_GEOMETRY_TYPE, MYF(0),
+             "POINT/LINESTRING/POLYGON/MULTIPOINT/MULTILINESTRING/MULTIPOLYGON",
+             "GEOMETRYCOLLECTION or invalid geometry", "stx_buffer");
+    *error = 1;
+    return nullptr;
+  }
+
+  if (!buffer_strategies_apply(buffer_dimension(r->type), strategies,
+                               distance)) {
+    my_error(ER_WRONG_ARGUMENTS, MYF(0), "stx_buffer");
+    *error = 1;
+    return nullptr;
+  }
+
+  std::string wkb;
+  try {
+    if (auto *cv = std::get_if<CartesianVariant>(&r->geometry))
+      wkb = buffer_variant<CartesianBufferStrategies>(*cv, r->srid, distance,
+                                                      strategies);
+    else if (auto *gv = std::get_if<GeographicVariant>(&r->geometry))
+      wkb = buffer_variant<GeographicBufferStrategies>(*gv, r->srid, distance,
+                                                       strategies);
+  } catch (const std::exception &) {
+    *error = 1;
+    return nullptr;
+  }
+
+  if (wkb.empty()) { *error = 1; return nullptr; }
+  return return_wkb(initid, wkb, result, length);
+}
+
+static void stx_buffer_deinit(UDF_INIT *initid) {
+  if (initid->ptr) free(initid->ptr);
+}
+
 }  // extern "C"
 
 // =============================================================================
@@ -4917,6 +5410,11 @@ static const udf_entry udf_table[] = {
      stx_isring_init, stx_isring_deinit},
     {"stx_shortestline", STRING_RESULT, (Udf_func_any)stx_shortestline,
      stx_shortestline_init, stx_shortestline_deinit},
+    // Buffer (geodesic for geographic SRIDs, full strategy support)
+    {"stx_buffer", STRING_RESULT, (Udf_func_any)stx_buffer, stx_buffer_init,
+     stx_buffer_deinit},
+    {"stx_buffer_strategy", STRING_RESULT, (Udf_func_any)stx_buffer_strategy,
+     stx_buffer_strategy_init, stx_buffer_strategy_deinit},
     // DMS conversion functions
     {"stx_dms2deg", REAL_RESULT, (Udf_func_any)stx_dms2deg,
      stx_dms2deg_init, stx_dms2deg_deinit},
